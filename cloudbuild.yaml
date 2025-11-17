@@ -1,0 +1,51 @@
+steps:
+  - id: Retrieve service account key
+    name: gcr.io/cloud-builders/gcloud
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        SAKEY=$(gcloud secrets versions access latest --secret="ops-controller-sakey")
+        echo "$$SAKEY" >> /workspace/sakey.json
+        cat /workspace/sakey.json
+  # - id: Build and push to Artifact Registry
+  #   name: gcr.io/cloud-builders/docker
+  #   entrypoint: "bash"
+  #   args:
+  #     - "-c"
+  #     - >-
+  #       docker run --network=cloudbuild -v /workspace:/workspace
+  #       gcr.io/kaniko-project/executor:latest
+  #       --destination=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA
+  #       --destination=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:latest
+  #       --cache=true
+  #       --cache-ttl=336h
+
+  # - id: Deploy to controller vm
+  #   name: "gcr.io/cloud-builders/gcloud"
+  #   args:
+  #     - compute
+  #     - ssh
+  #     - controller-dev
+  #     - --zone=us-central1-f
+  #     - --command=|
+  #       docker compose -f /app/docker-compose.yml down --rmi all --remove-orphans || true &&
+  #       docker compose -f /app/docker-compose.yml up -d
+
+serviceAccount: projects/local-first-476300/serviceAccounts/cloud-build-sa@local-first-476300.iam.gserviceaccount.com
+
+options:
+  substitutionOption: ALLOW_LOOSE
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _SERVICE_NAME: controller
+  _DEPLOY_REGION: us-central1
+  _AR_HOSTNAME: us-central1-docker.pkg.dev
+  _AR_REPOSITORY: open-source-application-images
+  _AR_PROJECT_ID: local-first-476300
+
+tags:
+  - development
+  - controller
+  - vm
