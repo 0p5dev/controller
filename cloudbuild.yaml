@@ -1,25 +1,25 @@
 steps:
-  - id: Retrieve service account key
-    name: gcr.io/cloud-builders/gcloud
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        SAKEY=$(gcloud secrets versions access latest --secret="ops-controller-sakey")
-        echo "$$SAKEY" >> /workspace/sakey.json
+  # - id: Retrieve service account key
+  #   name: gcr.io/cloud-builders/gcloud
+  #   entrypoint: "bash"
+  #   args:
+  #     - "-c"
+  #     - |
+  #       SAKEY=$(gcloud secrets versions access latest --secret="ops-controller-sakey")
+  #       echo "$$SAKEY" >> /workspace/sakey.json
 
-  - id: Build and push to Artifact Registry
-    name: gcr.io/cloud-builders/docker
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - >-
-        docker run --network=cloudbuild -v /workspace:/workspace
-        gcr.io/kaniko-project/executor:latest
-        --destination=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA
-        --destination=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:latest
-        --cache=true
-        --cache-ttl=336h
+  # - id: Build and push to Artifact Registry
+  #   name: gcr.io/cloud-builders/docker
+  #   entrypoint: "bash"
+  #   args:
+  #     - "-c"
+  #     - >-
+  #       docker run --network=cloudbuild -v /workspace:/workspace
+  #       gcr.io/kaniko-project/executor:latest
+  #       --destination=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA
+  #       --destination=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:latest
+  #       --cache=true
+  #       --cache-ttl=336h
 
   - id: Deploy to controller vm
     name: "gcr.io/cloud-builders/gcloud"
