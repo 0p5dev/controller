@@ -28,9 +28,7 @@ steps:
       - ssh
       - cloud-build-sa@controller-dev
       - --zone=us-central1-f
-      - --command=|
-        docker compose -f /app/docker-compose.yml down --rmi all --remove-orphans || true &&
-        docker compose -f /app/docker-compose.yml up -d
+      - --command=docker compose -f /app/docker-compose.yml down --rmi all --remove-orphans || true && docker compose -f /app/docker-compose.yml up -d
 
 serviceAccount: projects/local-first-476300/serviceAccounts/cloud-build-sa@local-first-476300.iam.gserviceaccount.com
 
