@@ -15,6 +15,7 @@ func InitializeApp(router *gin.Engine, pool *pgxpool.Pool) {
 	router.GET("/health", app.CheckHealth)
 
 	apiv1 := router.Group("/api/v1")
+	apiv1.GET("/health", app.CheckHealth)
 
 	auth := apiv1.Group("/auth")
 	auth.POST("/register", app.register)

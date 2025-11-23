@@ -33,7 +33,7 @@ func (app *App) pushToContainerRegistry(c *gin.Context) {
 		})
 		return
 	}
-	log.Printf("Authenticated user: %s", userClaims.Username)
+	log.Printf("Authenticated user: %s", userClaims.Email)
 
 	// Initialize Docker client
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -171,7 +171,7 @@ func (app *App) pushToContainerRegistry(c *gin.Context) {
 	_, err = app.Pool.Exec(ctx, `
 			INSERT INTO container_images (fqin, username)
 			VALUES ($1, $2)
-		`, targetTag, userClaims.Username)
+		`, targetTag, "userClaims.Username")
 	if err != nil {
 		log.Printf("DB insert error: %v", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{

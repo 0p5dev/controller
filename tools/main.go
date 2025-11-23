@@ -12,8 +12,11 @@ import (
 )
 
 type UserClaims struct {
-	Username string `json:"username"`
+	// Username string `json:"username"`
 	jwt.RegisteredClaims
+	Email        string                 `json:"email"`
+	Role         string                 `json:"role"`
+	UserMetadata map[string]interface{} `json:"user_metadata"`
 }
 
 func GetUserClaims(authHeader string) (*UserClaims, error) {
@@ -26,7 +29,7 @@ func GetUserClaims(authHeader string) (*UserClaims, error) {
 	}
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
-	jwtSecret := os.Getenv("JWT_SECRET")
+	jwtSecret := os.Getenv("SUPABASE_JWT_SECRET")
 	token, err := jwt.ParseWithClaims(tokenString, &UserClaims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])

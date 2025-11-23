@@ -70,7 +70,7 @@ func (app *App) listDeployments(c *gin.Context) {
 
 	// Always filter by authenticated user's deployments (users can only see their own)
 	whereConditions = append(whereConditions, fmt.Sprintf("username = $%d", argIndex))
-	args = append(args, userClaims.Username)
+	args = append(args, userClaims.Email)
 	argIndex++
 
 	// Add search filter (searches across name, url, and container_image)
@@ -82,7 +82,7 @@ func (app *App) listDeployments(c *gin.Context) {
 	}
 
 	// Add username filter (for admin use - but currently limited to own deployments)
-	if username != "" && username == userClaims.Username {
+	if username != "" && username == userClaims.Email {
 		// This is redundant given our security model, but kept for API consistency
 		whereConditions = append(whereConditions, fmt.Sprintf("username = $%d", argIndex))
 		args = append(args, username)
@@ -175,7 +175,7 @@ func (app *App) listDeployments(c *gin.Context) {
 		TotalPages:  totalPages,
 	}
 
-	log.Printf("User %s retrieved %d deployments (page %d/%d)", userClaims.Username, len(deployments), page, totalPages)
+	log.Printf("User %s retrieved %d deployments (page %d/%d)", userClaims.Email, len(deployments), page, totalPages)
 
 	c.JSON(http.StatusOK, response)
 }

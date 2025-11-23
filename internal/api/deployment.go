@@ -31,7 +31,7 @@ func (app *App) deploy(c *gin.Context) {
 		})
 		return
 	}
-	log.Printf("Authenticated user: %s", userClaims.Username)
+	log.Printf("Authenticated user: %s", userClaims.Email)
 
 	var req RequestBody
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -63,7 +63,7 @@ func (app *App) deploy(c *gin.Context) {
 			})
 			return
 		}
-		if existingUsername != userClaims.Username {
+		if existingUsername != userClaims.Email {
 			log.Printf("Deployment name %s already owned by %s", req.Name, existingUsername)
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
 				"error": "Deployment name already in use by another user",
@@ -121,7 +121,7 @@ func (app *App) deploy(c *gin.Context) {
 	ctx := context.Background()
 
 	// Create unique stack name to ensure each deployment creates a new service
-	stackName := fmt.Sprintf("stack-%s-%s", userClaims.Username, req.Name)
+	stackName := fmt.Sprintf("stack-%s-%s", "userClaims.Username", req.Name)
 	projectName := fmt.Sprintf("project-%s", req.Name)
 
 	s, err := auto.UpsertStackInlineSource(ctx, stackName, projectName, createCloudRunService)
@@ -231,7 +231,7 @@ func (app *App) deploy(c *gin.Context) {
 		_, err = app.Pool.Exec(ctx, `
 				INSERT INTO deployments (name, url, tier, container_image, username)
 				VALUES ($1, $2, $3, $4, $5) 
-			`, req.Name, serviceUrl, req.Tier, req.ContainerImage, userClaims.Username)
+			`, req.Name, serviceUrl, req.Tier, req.ContainerImage, userClaims.Email)
 		if err != nil {
 			log.Printf("DB insert error: %v", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{

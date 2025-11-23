@@ -76,7 +76,7 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 		return
 	}
 
-	if dbUsername != userClaims.Username {
+	if dbUsername != userClaims.Email {
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 			"error": "access denied - deployment belongs to another user",
 		})
@@ -173,7 +173,7 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 		details.Status = "Unknown"
 	}
 
-	log.Printf("User %s retrieved details for deployment %s", userClaims.Username, deploymentName)
+	log.Printf("User %s retrieved details for deployment %s", userClaims.Email, deploymentName)
 
 	c.JSON(http.StatusOK, details)
 }
