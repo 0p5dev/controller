@@ -1,3 +1,4 @@
 *tmp/
 .env
 sakey.json
+oauth-jwt-structure.txt

@@ -12,7 +12,6 @@ import (
 )
 
 type UserClaims struct {
-	// Username string `json:"username"`
 	jwt.RegisteredClaims
 	Email        string                 `json:"email"`
 	Role         string                 `json:"role"`

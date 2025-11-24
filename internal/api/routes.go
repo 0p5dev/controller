@@ -27,5 +27,5 @@ func InitializeApp(router *gin.Engine, pool *pgxpool.Pool) {
 	deployments := apiv1.Group("/deployments")
 	deployments.GET("/:name", app.getDeploymentByName)
 	deployments.GET("", app.listDeployments)
-	deployments.POST("", app.deploy)
+	deployments.POST("", app.createDeployment)
 }

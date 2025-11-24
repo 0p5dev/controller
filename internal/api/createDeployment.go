@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
@@ -18,10 +20,11 @@ import (
 type RequestBody struct {
 	Name           string `json:"name"`
 	ContainerImage string `json:"container_image"`
-	Tier           string `json:"tier"`
+	MinInstances   int    `json:"min_instances,omitempty"`
+	MaxInstances   int    `json:"max_instances,omitempty"`
 }
 
-func (app *App) deploy(c *gin.Context) {
+func (app *App) createDeployment(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 	userClaims, err := tools.GetUserClaims(authHeader)
 	if err != nil {
@@ -42,9 +45,18 @@ func (app *App) deploy(c *gin.Context) {
 		return
 	}
 
+	// Set default values if not provided
+	if req.MinInstances == 0 {
+		req.MinInstances = 0
+	}
+	if req.MaxInstances == 0 {
+		req.MaxInstances = 1
+	}
+
 	// Check for existing deployment with the same name
 	updateNeeded := false
-	rows, err := app.Pool.Query(c.Request.Context(), `SELECT username FROM deployments WHERE name=$1`, req.Name)
+	var existingDeploymentId string
+	rows, err := app.Pool.Query(c.Request.Context(), `SELECT id FROM deployments WHERE name=$1 AND user=$2`, req.Name, userClaims.Email)
 	if err != nil {
 		log.Printf("DB query error: %v", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -54,23 +66,16 @@ func (app *App) deploy(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var existingUsername string
 	if rows.Next() {
-		if err := rows.Scan(&existingUsername); err != nil {
-			log.Printf("DB scan error: %v", err)
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to read existing deployment: %v", err),
-			})
-			return
-		}
-		if existingUsername != userClaims.Email {
-			log.Printf("Deployment name %s already owned by %s", req.Name, existingUsername)
-			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-				"error": "Deployment name already in use by another user",
-			})
-			return
-		}
 		updateNeeded = true
+	}
+
+	if err := rows.Scan(&existingDeploymentId); err != nil {
+		log.Printf("DB scan error: %v", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("Failed to scan deployment ID: %v", err),
+		})
+		return
 	}
 
 	createCloudRunService := func(ctx *pulumi.Context) error {
@@ -79,13 +84,13 @@ func (app *App) deploy(c *gin.Context) {
 			Name:               pulumi.String(req.Name),
 			DeletionProtection: pulumi.Bool(false),
 			Scaling: &cloudrunv2.ServiceScalingArgs{
-				MinInstanceCount: pulumi.Int(0),
-				MaxInstanceCount: pulumi.Int(1),
+				MinInstanceCount: pulumi.Int(req.MinInstances),
+				MaxInstanceCount: pulumi.Int(req.MaxInstances),
 			},
 			Template: &cloudrunv2.ServiceTemplateArgs{
 				Scaling: &cloudrunv2.ServiceTemplateScalingArgs{
-					MinInstanceCount: pulumi.Int(0),
-					MaxInstanceCount: pulumi.Int(1),
+					MinInstanceCount: pulumi.Int(req.MinInstances),
+					MaxInstanceCount: pulumi.Int(req.MaxInstances),
 				},
 				Containers: cloudrunv2.ServiceTemplateContainerArray{
 					&cloudrunv2.ServiceTemplateContainerArgs{
@@ -100,8 +105,8 @@ func (app *App) deploy(c *gin.Context) {
 
 		// Allow public access using Cloud Run service IAM policy
 		_, err = cloudrunv2.NewServiceIamBinding(ctx, "public-access", &cloudrunv2.ServiceIamBindingArgs{
-			Project:  pulumi.String("local-first-476300"),
-			Location: pulumi.String("us-central1"),
+			Project:  pulumi.String(os.Getenv("GCP_PROJECT_ID")),
+			Location: pulumi.String(os.Getenv("GCP_REGION")),
 			Name:     service.Name,
 			Role:     pulumi.String("roles/run.invoker"),
 			Members: pulumi.StringArray{
@@ -120,8 +125,11 @@ func (app *App) deploy(c *gin.Context) {
 
 	ctx := context.Background()
 
-	// Create unique stack name to ensure each deployment creates a new service
-	stackName := fmt.Sprintf("stack-%s-%s", "userClaims.Username", req.Name)
+	// Create unique stack name using hash of email to ensure each deployment creates a new service
+	hash := sha256.Sum256([]byte(userClaims.Email))
+	userHash := hex.EncodeToString(hash[:])[:8] // Use first 8 characters of hash
+
+	stackName := fmt.Sprintf("stack-%s-%s", req.Name, userHash)
 	projectName := fmt.Sprintf("project-%s", req.Name)
 
 	s, err := auto.UpsertStackInlineSource(ctx, stackName, projectName, createCloudRunService)
@@ -143,7 +151,7 @@ func (app *App) deploy(c *gin.Context) {
 		return
 	}
 
-	s.SetConfig(ctx, "gcp:project", auto.ConfigValue{Value: "local-first-476300"})
+	s.SetConfig(ctx, "gcp:project", auto.ConfigValue{Value: os.Getenv("GCP_PROJECT_ID")})
 
 	_, err = s.Refresh(ctx)
 	if err != nil {
@@ -213,7 +221,7 @@ func (app *App) deploy(c *gin.Context) {
 
 	// Record deployment in database
 	if updateNeeded {
-		_, err := app.Pool.Exec(ctx, `UPDATE deployments SET container_image=$1 WHERE name=$2`, req.ContainerImage, req.Name)
+		_, err := app.Pool.Exec(ctx, `UPDATE deployments SET container_image=$1, min_instances=$2, max_instances=$3 WHERE id=$4`, req.ContainerImage, req.MinInstances, req.MaxInstances, existingDeploymentId)
 		if err != nil {
 			log.Printf("DB update error: %v", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -229,9 +237,9 @@ func (app *App) deploy(c *gin.Context) {
 		return
 	} else {
 		_, err = app.Pool.Exec(ctx, `
-				INSERT INTO deployments (name, url, tier, container_image, username)
-				VALUES ($1, $2, $3, $4, $5) 
-			`, req.Name, serviceUrl, req.Tier, req.ContainerImage, userClaims.Email)
+				INSERT INTO deployments (name, url, container_image, user, min_instances, max_instances)
+				VALUES ($1, $2, $3, $4, $5, $6) 
+			`, req.Name, serviceUrl, req.ContainerImage, userClaims.Email, req.MinInstances, req.MaxInstances)
 		if err != nil {
 			log.Printf("DB insert error: %v", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
