@@ -7,8 +7,8 @@ import (
 )
 
 type ContainerImage struct {
-	Fqin string `json:"fqin"`
-	User string `json:"user"`
+	Fqin      string `json:"fqin"`
+	UserEmail string `json:"user_email"`
 }
 
 func MigrateContainerImageTable(pool *pgxpool.Pool) error {
@@ -16,7 +16,7 @@ func MigrateContainerImageTable(pool *pgxpool.Pool) error {
 	_, err := pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS container_images (
 			fqin TEXT PRIMARY KEY,
-			user TEXT NOT NULL
+			user_email TEXT NOT NULL
 		);
 	`)
 	return err

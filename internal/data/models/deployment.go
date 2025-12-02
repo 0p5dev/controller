@@ -11,7 +11,7 @@ type Deployment struct {
 	Name           string `json:"name"`
 	Url            string `json:"url"`
 	ContainerImage string `json:"container_image"`
-	User           string `json:"user"`
+	UserEmail      string `json:"user_email"`
 	MinInstances   int    `json:"min_instances"`
 	MaxInstances   int    `json:"max_instances"`
 }
@@ -24,7 +24,7 @@ func MigrateDeploymentTable(pool *pgxpool.Pool) error {
 			name TEXT NOT NULL,
 			url TEXT NOT NULL,
 			container_image TEXT NOT NULL REFERENCES container_images(fqin),
-			user TEXT NOT NULL,
+			user_email TEXT NOT NULL,
 			min_instances INT NOT NULL DEFAULT 0,
 			max_instances INT NOT NULL DEFAULT 1
 		);

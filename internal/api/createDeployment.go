@@ -56,7 +56,7 @@ func (app *App) createDeployment(c *gin.Context) {
 	// Check for existing deployment with the same name
 	updateNeeded := false
 	var existingDeploymentId string
-	rows, err := app.Pool.Query(c.Request.Context(), `SELECT id FROM deployments WHERE name=$1 AND user=$2`, req.Name, userClaims.Email)
+	rows, err := app.Pool.Query(c.Request.Context(), `SELECT id FROM deployments WHERE name=$1 AND user_email=$2`, req.Name, userClaims.Email)
 	if err != nil {
 		log.Printf("DB query error: %v", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -237,7 +237,7 @@ func (app *App) createDeployment(c *gin.Context) {
 		return
 	} else {
 		_, err = app.Pool.Exec(ctx, `
-				INSERT INTO deployments (name, url, container_image, user, min_instances, max_instances)
+				INSERT INTO deployments (name, url, container_image, user_email, min_instances, max_instances)
 				VALUES ($1, $2, $3, $4, $5, $6) 
 			`, req.Name, serviceUrl, req.ContainerImage, userClaims.Email, req.MinInstances, req.MaxInstances)
 		if err != nil {
