@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
@@ -61,13 +62,13 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 	}
 
 	ctx := context.Background()
-	projectID := "local-first-476300"
-	location := "us-central1"
+	projectID := os.Getenv("GCP_PROJECT_ID")
+	location := os.Getenv("GCP_REGION")
 
 	// Verify the deployment belongs to the authenticated user
 	dbCtx := c.Request.Context()
-	var dbUsername string
-	err = app.Pool.QueryRow(dbCtx, "SELECT username FROM deployments WHERE name = $1", deploymentName).Scan(&dbUsername)
+	var dbUserEmail string
+	err = app.Pool.QueryRow(dbCtx, "SELECT user_email FROM deployments WHERE name = $1", deploymentName).Scan(&dbUserEmail)
 	if err != nil {
 		log.Printf("Error finding deployment %s: %v", deploymentName, err)
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
@@ -76,7 +77,7 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 		return
 	}
 
-	if dbUsername != userClaims.Email {
+	if dbUserEmail != userClaims.Email {
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 			"error": "access denied - deployment belongs to another user",
 		})

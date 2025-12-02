@@ -11,8 +11,13 @@ up:
 up-local:
     docker compose --profile local up
 
-down:
-    docker compose --profile dev down --rmi local --remove-orphans
+down *FLAGS:
+    #!/usr/bin/env bash
+    cmd="docker compose --profile dev down --remove-orphans"
+    if [[ "{{FLAGS}}" == *"--rmi"* ]]; then
+        cmd="${cmd} --rmi local"
+    fi
+    eval $cmd
 
 down-local:
     docker compose --profile local down --rmi local --remove-orphans

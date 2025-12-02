@@ -108,30 +108,6 @@ func (app *App) pushToContainerRegistry(c *gin.Context) {
 		log.Printf("Warning: failed to remove original image %s from local Docker daemon: %v", imageID, err)
 	}
 
-	// TODO: Change this logic and/or the data model now that we're using unique tags
-	// Check if targetTag already exists in DB and is owned by a different user
-	// var existingUser string
-	// err = app.Pool.QueryRow(ctx, `
-	// 	SELECT COALESCE(
-	// 		(SELECT username FROM container_images WHERE fqin = $1 LIMIT 1),
-	// 		''
-	// 	)
-	// `, targetTag).Scan(&existingUser)
-	// if err != nil {
-	// 	log.Printf("DB query error: %v", err)
-	// 	c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-	// 		"error": fmt.Sprintf("Database error while checking existing image: %v", err),
-	// 	})
-	// 	return
-	// }
-	// if existingUser != "" && existingUser != userClaims.Username {
-	// 	log.Printf("Image %s already exists and is owned by another user", targetTag)
-	// 	c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-	// 		"error": "Image already exists and is owned by another user",
-	// 	})
-	// 	return
-	// }
-
 	// Get image from local Docker daemon
 	imageRef, err := name.ParseReference(targetTag)
 	if err != nil {
@@ -169,9 +145,9 @@ func (app *App) pushToContainerRegistry(c *gin.Context) {
 
 	// Record pushed image in database
 	_, err = app.Pool.Exec(ctx, `
-			INSERT INTO container_images (fqin, username)
+			INSERT INTO container_images (fqin, user_email)
 			VALUES ($1, $2)
-		`, targetTag, "userClaims.Username")
+		`, targetTag, userClaims.Email)
 	if err != nil {
 		log.Printf("DB insert error: %v", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
