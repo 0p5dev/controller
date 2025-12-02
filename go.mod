@@ -3,7 +3,6 @@ module github.com/digizyne/lfcont
 go 1.25.3
 
 require (
-	cloud.google.com/go/logging v1.13.0
 	cloud.google.com/go/monitoring v1.24.3
 	cloud.google.com/go/run v1.10.0
 	github.com/gin-contrib/cors v1.7.6
