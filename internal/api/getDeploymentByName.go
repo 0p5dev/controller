@@ -67,19 +67,12 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 
 	// Verify the deployment belongs to the authenticated user
 	dbCtx := c.Request.Context()
-	var dbUserEmail string
-	err = app.Pool.QueryRow(dbCtx, "SELECT user_email FROM deployments WHERE name = $1", deploymentName).Scan(&dbUserEmail)
+	var deploymentId string
+	err = app.Pool.QueryRow(dbCtx, "SELECT id FROM deployments WHERE name = $1 AND user_email = $2", deploymentName, userClaims.Email).Scan(&deploymentId)
 	if err != nil {
-		log.Printf("Error finding deployment %s: %v", deploymentName, err)
+		log.Printf("Error finding deployment %s for user %s: %v", deploymentName, userClaims.Email, err)
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "deployment not found",
-		})
-		return
-	}
-
-	if dbUserEmail != userClaims.Email {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-			"error": "access denied - deployment belongs to another user",
 		})
 		return
 	}

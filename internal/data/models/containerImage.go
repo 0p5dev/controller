@@ -2,15 +2,16 @@ package models
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type ContainerImage struct {
-	Fqin      string `json:"fqin"`
-	UserEmail string `json:"user_email"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	Fqin      string    `json:"fqin"`
+	UserEmail string    `json:"user_email"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func MigrateContainerImageTable(pool *pgxpool.Pool) error {

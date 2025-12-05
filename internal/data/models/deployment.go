@@ -2,20 +2,21 @@ package models
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Deployment struct {
-	Id             string `json:"id"`
-	Name           string `json:"name"`
-	Url            string `json:"url"`
-	ContainerImage string `json:"container_image"`
-	UserEmail      string `json:"user_email"`
-	MinInstances   int    `json:"min_instances"`
-	MaxInstances   int    `json:"max_instances"`
-	CreatedAt      string `json:"created_at"`
-	UpdatedAt      string `json:"updated_at"`
+	Id             string    `json:"id"`
+	Name           string    `json:"name"`
+	Url            string    `json:"url"`
+	ContainerImage string    `json:"container_image"`
+	UserEmail      string    `json:"user_email"`
+	MinInstances   int       `json:"min_instances"`
+	MaxInstances   int       `json:"max_instances"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 func MigrateDeploymentTable(pool *pgxpool.Pool) error {
