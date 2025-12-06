@@ -68,14 +68,13 @@ func (app *App) createDeployment(c *gin.Context) {
 
 	if rows.Next() {
 		updateNeeded = true
-	}
-
-	if err := rows.Scan(&existingDeploymentId); err != nil {
-		log.Printf("DB scan error: %v", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to scan deployment ID: %v", err),
-		})
-		return
+		if err := rows.Scan(&existingDeploymentId); err != nil {
+			log.Printf("DB scan error: %v", err)
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to scan deployment ID: %v", err),
+			})
+			return
+		}
 	}
 
 	createCloudRunService := func(ctx *pulumi.Context) error {
