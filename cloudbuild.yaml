@@ -8,18 +8,26 @@ steps:
         SAKEY=$(gcloud secrets versions access latest --secret="ops-controller-sakey")
         echo "$$SAKEY" >> /workspace/sakey.json
 
-  - id: Build and push to Artifact Registry
-    name: gcr.io/cloud-builders/docker
-    entrypoint: "bash"
+  - id: Build/push to AR
+    name: quay.io/buildah/stable:latest
+    entrypoint: bash
     args:
-      - "-c"
-      - >-
-        docker run --network=cloudbuild -v /workspace:/workspace
-        gcr.io/kaniko-project/executor:latest
-        --destination=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA
-        --destination=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:latest
-        --cache=true
-        --cache-ttl=336h
+      - -c
+      - |
+        buildah build \
+          --tag $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA \
+          --tag $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest \
+          --file ./Dockerfile \
+          --format docker \
+          --layers \
+          --cache-from $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME/cache \
+          --cache-to $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME/cache \
+          .
+
+        buildah push \
+          $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+        buildah push \
+          $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest
 
   - id: Deploy to controller vm
     name: "gcr.io/cloud-builders/gcloud"
