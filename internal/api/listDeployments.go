@@ -9,23 +9,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/digizyne/lfcont/internal/data/models"
 	"github.com/digizyne/lfcont/tools"
 )
 
-type DeploymentResponse struct {
-	Name           string `json:"name"`
-	URL            string `json:"url"`
-	Tier           string `json:"tier"`
-	ContainerImage string `json:"container_image"`
-	Username       string `json:"username"`
-}
-
 type PaginatedDeploymentsResponse struct {
-	Deployments []DeploymentResponse `json:"deployments"`
-	Total       int                  `json:"total"`
-	Page        int                  `json:"page"`
-	Limit       int                  `json:"limit"`
-	TotalPages  int                  `json:"total_pages"`
+	Deployments []models.Deployment `json:"deployments"`
+	Count       int                 `json:"count"`
+	Page        int                 `json:"page"`
+	Limit       int                 `json:"limit"`
+	TotalPages  int                 `json:"total_pages"`
 }
 
 func (app *App) listDeployments(c *gin.Context) {
@@ -60,8 +53,6 @@ func (app *App) listDeployments(c *gin.Context) {
 
 	// Parse search parameters
 	search := c.Query("search")
-	username := c.Query("username")
-	tier := c.Query("tier")
 
 	// Build dynamic WHERE clause and args
 	var whereConditions []string
@@ -69,7 +60,7 @@ func (app *App) listDeployments(c *gin.Context) {
 	argIndex := 1
 
 	// Always filter by authenticated user's deployments (users can only see their own)
-	whereConditions = append(whereConditions, fmt.Sprintf("username = $%d", argIndex))
+	whereConditions = append(whereConditions, fmt.Sprintf("user_email = $%d", argIndex))
 	args = append(args, userClaims.Email)
 	argIndex++
 
@@ -78,21 +69,6 @@ func (app *App) listDeployments(c *gin.Context) {
 		searchPattern := "%" + strings.ToLower(search) + "%"
 		whereConditions = append(whereConditions, fmt.Sprintf("(LOWER(name) LIKE $%d OR LOWER(url) LIKE $%d OR LOWER(container_image) LIKE $%d)", argIndex, argIndex, argIndex))
 		args = append(args, searchPattern)
-		argIndex++
-	}
-
-	// Add username filter (for admin use - but currently limited to own deployments)
-	if username != "" && username == userClaims.Email {
-		// This is redundant given our security model, but kept for API consistency
-		whereConditions = append(whereConditions, fmt.Sprintf("username = $%d", argIndex))
-		args = append(args, username)
-		argIndex++
-	}
-
-	// Add tier filter
-	if tier != "" {
-		whereConditions = append(whereConditions, fmt.Sprintf("tier = $%d", argIndex))
-		args = append(args, tier)
 		argIndex++
 	}
 
@@ -115,8 +91,7 @@ func (app *App) listDeployments(c *gin.Context) {
 
 	// Get deployments with pagination
 	query := fmt.Sprintf(`
-		SELECT name, url, tier, container_image, username 
-		FROM deployments 
+		SELECT * FROM deployments 
 		%s 
 		ORDER BY name ASC 
 		LIMIT $%d OFFSET $%d
@@ -135,15 +110,19 @@ func (app *App) listDeployments(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var deployments []DeploymentResponse
+	var deployments []models.Deployment
 	for rows.Next() {
-		var deployment DeploymentResponse
+		var deployment models.Deployment
 		err := rows.Scan(
+			&deployment.Id,
 			&deployment.Name,
-			&deployment.URL,
-			&deployment.Tier,
+			&deployment.Url,
 			&deployment.ContainerImage,
-			&deployment.Username,
+			&deployment.UserEmail,
+			&deployment.MinInstances,
+			&deployment.MaxInstances,
+			&deployment.CreatedAt,
+			&deployment.UpdatedAt,
 		)
 		if err != nil {
 			log.Printf("Error scanning deployment row: %v", err)
@@ -169,7 +148,7 @@ func (app *App) listDeployments(c *gin.Context) {
 	// Build response
 	response := PaginatedDeploymentsResponse{
 		Deployments: deployments,
-		Total:       totalCount,
+		Count:       totalCount,
 		Page:        page,
 		Limit:       limit,
 		TotalPages:  totalPages,

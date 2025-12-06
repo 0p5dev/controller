@@ -25,7 +25,6 @@ func InitializeDatabase() (*pgxpool.Pool, error) {
 		name string
 		fn   func(*pgxpool.Pool) error
 	}{
-		{"users", models.MigrateUserTable},
 		{"container_images", models.MigrateContainerImageTable},
 		{"deployments", models.MigrateDeploymentTable},
 	}
