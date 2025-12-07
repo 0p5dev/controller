@@ -41,6 +41,19 @@ type ServiceMetrics struct {
 	CPUPerHour      [24]int `json:"cpu_per_hour"`
 }
 
+// @Summary Get deployment by name
+// @Description Retrieve detailed information about a specific deployment including metrics
+// @Tags deployments
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param name path string true "Deployment name"
+// @Success 200 {object} api.CloudRunServiceDetails "Deployment details with metrics"
+// @Failure 400 {object} map[string]string "Deployment name is required"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Deployment not found"
+// @Failure 500 {object} map[string]string "Failed to retrieve deployment"
+// @Router /deployments/{name} [get]
 func (app *App) getDeploymentByName(c *gin.Context) {
 	// Extract user claims for authentication and filtering
 	authHeader := c.GetHeader("Authorization")

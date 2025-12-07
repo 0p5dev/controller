@@ -21,6 +21,19 @@ type PaginatedDeploymentsResponse struct {
 	TotalPages  int                 `json:"total_pages"`
 }
 
+// @Summary List deployments
+// @Description Get a paginated list of deployments for the authenticated user
+// @Tags deployments
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param page query int false "Page number (default: 1)"
+// @Param limit query int false "Items per page (default: 10, max: 100)"
+// @Param search query string false "Search in name, url, and container_image"
+// @Success 200 {object} api.PaginatedDeploymentsResponse "Paginated list of deployments"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Failed to retrieve deployments"
+// @Router /deployments [get]
 func (app *App) listDeployments(c *gin.Context) {
 	// Extract user claims for authentication and filtering
 	authHeader := c.GetHeader("Authorization")

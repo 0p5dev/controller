@@ -1,0 +1,333 @@
+basePath: /api/v1
+definitions:
+  api.CloudRunServiceDetails:
+    properties:
+      created_time:
+        type: string
+      image:
+        type: string
+      location:
+        type: string
+      metrics:
+        $ref: '#/definitions/api.ServiceMetrics'
+      name:
+        type: string
+      scaling:
+        $ref: '#/definitions/api.ServiceScaling'
+      status:
+        type: string
+      updated_time:
+        type: string
+      url:
+        type: string
+    type: object
+  api.PaginatedDeploymentsResponse:
+    properties:
+      count:
+        type: integer
+      deployments:
+        items:
+          $ref: '#/definitions/models.Deployment'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  api.RequestBody:
+    properties:
+      container_image:
+        type: string
+      max_instances:
+        type: integer
+      min_instances:
+        type: integer
+      name:
+        type: string
+    type: object
+  api.ServiceMetrics:
+    properties:
+      cpu_per_hour:
+        items:
+          type: integer
+        type: array
+      requests_per_hour:
+        items:
+          type: integer
+        type: array
+    type: object
+  api.ServiceScaling:
+    properties:
+      max_instances:
+        type: integer
+      min_instances:
+        type: integer
+    type: object
+  api.SupabaseCredentials:
+    properties:
+      supabase_anon_public_key:
+        type: string
+      supabase_url:
+        type: string
+    type: object
+  models.Deployment:
+    properties:
+      container_image:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      max_instances:
+        type: integer
+      min_instances:
+        type: integer
+      name:
+        type: string
+      updated_at:
+        type: string
+      url:
+        type: string
+      user_email:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: A REST API for managing Cloud Run deployments and container images
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: OpsController API
+  version: "1.0"
+paths:
+  /auth/supabase-credentials:
+    get:
+      description: Retrieve Supabase URL and anon public key from GCP Secret Manager
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Supabase credentials
+          schema:
+            $ref: '#/definitions/api.SupabaseCredentials'
+        "500":
+          description: Failed to retrieve credentials
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get Supabase credentials
+      tags:
+      - auth
+  /container-images:
+    post:
+      consumes:
+      - application/x-gzip
+      description: Upload a container image tarball and push it to Google Artifact
+        Registry
+      parameters:
+      - description: Gzipped container image tarball
+        in: body
+        name: image
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Image pushed successfully with FQIN
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Failed to push image
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Push container image to registry
+      tags:
+      - container-images
+  /deployments:
+    get:
+      consumes:
+      - application/json
+      description: Get a paginated list of deployments for the authenticated user
+      parameters:
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Items per page (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      - description: Search in name, url, and container_image
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Paginated list of deployments
+          schema:
+            $ref: '#/definitions/api.PaginatedDeploymentsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Failed to retrieve deployments
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List deployments
+      tags:
+      - deployments
+    post:
+      consumes:
+      - application/json
+      description: Deploy a container image to Cloud Run
+      parameters:
+      - description: Deployment details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.RequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Deployment successful with service URL
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Invalid request payload
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Deployment failed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a new deployment
+      tags:
+      - deployments
+  /deployments/{name}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve detailed information about a specific deployment including
+        metrics
+      parameters:
+      - description: Deployment name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Deployment details with metrics
+          schema:
+            $ref: '#/definitions/api.CloudRunServiceDetails'
+        "400":
+          description: Deployment name is required
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Deployment not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Failed to retrieve deployment
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get deployment by name
+      tags:
+      - deployments
+  /health:
+    get:
+      description: Check the health status of the API and database connection
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Service is healthy
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Service is unhealthy
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Health check
+      tags:
+      - health
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

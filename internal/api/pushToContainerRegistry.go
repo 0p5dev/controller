@@ -21,6 +21,18 @@ import (
 	"github.com/google/uuid"
 )
 
+// @Summary Push container image to registry
+// @Description Upload a container image tarball and push it to Google Artifact Registry
+// @Tags container-images
+// @Accept application/x-gzip
+// @Produce json
+// @Security BearerAuth
+// @Param image body string true "Gzipped container image tarball"
+// @Success 200 {object} map[string]string "Image pushed successfully with FQIN"
+// @Failure 400 {object} map[string]string "Invalid request"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Failed to push image"
+// @Router /container-images [post]
 func (app *App) pushToContainerRegistry(c *gin.Context) {
 	ctx := context.Background()
 

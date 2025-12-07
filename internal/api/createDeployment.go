@@ -24,6 +24,18 @@ type RequestBody struct {
 	MaxInstances   int    `json:"max_instances,omitempty"`
 }
 
+// @Summary Create a new deployment
+// @Description Deploy a container image to Cloud Run
+// @Tags deployments
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body api.RequestBody true "Deployment details"
+// @Success 200 {object} map[string]string "Deployment successful with service URL"
+// @Failure 400 {object} map[string]string "Invalid request payload"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Deployment failed"
+// @Router /deployments [post]
 func (app *App) createDeployment(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 	userClaims, err := tools.GetUserClaims(authHeader)

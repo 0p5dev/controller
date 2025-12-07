@@ -3,6 +3,11 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	_ "github.com/digizyne/lfcont/docs"
 )
 
 type App struct {
@@ -12,14 +17,13 @@ type App struct {
 func InitializeApp(router *gin.Engine, pool *pgxpool.Pool) {
 	app := &App{Pool: pool}
 
-	router.GET("/health", app.CheckHealth)
+	url := ginSwagger.URL("http://localhost:8080/swagger/doc.json")
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, url))
 
 	apiv1 := router.Group("/api/v1")
 	apiv1.GET("/health", app.CheckHealth)
 
 	auth := apiv1.Group("/auth")
-	auth.POST("/register", app.register)
-	auth.POST("/login", app.login)
 	auth.GET("/supabase-credentials", app.getSupabaseCredentials)
 
 	containerImages := apiv1.Group("/container-images")
