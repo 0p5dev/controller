@@ -16,7 +16,8 @@ services:
       postgres:
         condition: service_healthy
         required: false
-    command: ["air", "-c", ".air.toml"]
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["go install github.com/air-verse/air@latest && air -c .air.toml"]
     env_file:
       - .env
     profiles:

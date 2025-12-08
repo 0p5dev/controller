@@ -16,8 +16,8 @@ type UserClaims struct {
 }
 
 type SupabaseCredentials struct {
-	SupabaseURL             string `json:"supabase_url"`
-	SupabaseAnonPublicKey   string `json:"supabase_anon_public_key"`
+	SupabaseURL           string `json:"supabase_url"`
+	SupabaseAnonPublicKey string `json:"supabase_anon_public_key"`
 }
 
 // @Summary Get Supabase credentials
