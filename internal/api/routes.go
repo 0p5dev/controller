@@ -23,9 +23,6 @@ func InitializeApp(router *gin.Engine, pool *pgxpool.Pool) {
 	apiv1 := router.Group("/api/v1")
 	apiv1.GET("/health", app.CheckHealth)
 
-	auth := apiv1.Group("/auth")
-	auth.GET("/supabase-credentials", app.getSupabaseCredentials)
-
 	containerImages := apiv1.Group("/container-images")
 	containerImages.POST("", app.pushToContainerRegistry)
 
