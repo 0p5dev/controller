@@ -1,13 +1,12 @@
 package main
 
 import (
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/digizyne/lfcont/internal/api"
-	"github.com/digizyne/lfcont/internal/data"
-	"github.com/gin-contrib/cors"
 )
 
 // @title           OpsController API
@@ -31,21 +30,12 @@ import (
 // @description Type "Bearer" followed by a space and JWT token.
 
 func main() {
-	pool, err := data.InitializeDatabase()
+	router := gin.New()
+	dbConnectionPool, err := api.InitializeApp(router)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		slog.Error("Failed to initialize application", "error", err)
+		os.Exit(1)
 	}
-	defer pool.Close()
-
-	corsConfig := cors.Config{
-		AllowOrigins:  []string{"*"},
-		AllowMethods:  []string{"GET", "POST", "OPTIONS"},
-		AllowHeaders:  []string{"Origin", "Content-Type", "Authorization"},
-		ExposeHeaders: []string{"Content-Length"},
-	}
-
-	router := gin.Default()
-	router.Use(cors.New(corsConfig))
-	api.InitializeApp(router, pool)
+	defer dbConnectionPool.Close()
 	router.Run("0.0.0.0:8080")
 }

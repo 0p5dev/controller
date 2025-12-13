@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -28,6 +29,7 @@ func (app *App) CheckHealth(c *gin.Context) {
 	// return
 	ctx := c.Request.Context()
 	if _, err := app.Pool.Exec(ctx, "SELECT version()"); err != nil {
+		slog.Error("failed to query postgres version", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":  "failed to query postgres version",
 			"detail": err,

@@ -2,7 +2,7 @@ package api
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -39,7 +39,7 @@ func (app *App) listDeployments(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 	userClaims, err := tools.GetUserClaims(authHeader)
 	if err != nil {
-		log.Printf("Authentication error: %v", err)
+		slog.Error("Authentication error", "error", err)
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 			"error": "Unauthorized: " + err.Error(),
 		})
@@ -95,7 +95,7 @@ func (app *App) listDeployments(c *gin.Context) {
 	var totalCount int
 	err = app.Pool.QueryRow(ctx, countQuery, args...).Scan(&totalCount)
 	if err != nil {
-		log.Printf("Error counting deployments: %v", err)
+		slog.Error("Error counting deployments", "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to count deployments",
 		})
@@ -115,7 +115,7 @@ func (app *App) listDeployments(c *gin.Context) {
 
 	rows, err := app.Pool.Query(ctx, query, args...)
 	if err != nil {
-		log.Printf("Error querying deployments: %v", err)
+		slog.Error("Error querying deployments", "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to query deployments",
 		})
@@ -138,7 +138,7 @@ func (app *App) listDeployments(c *gin.Context) {
 			&deployment.UpdatedAt,
 		)
 		if err != nil {
-			log.Printf("Error scanning deployment row: %v", err)
+			slog.Error("Error scanning deployment row", "error", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to parse deployment data",
 			})
@@ -148,7 +148,7 @@ func (app *App) listDeployments(c *gin.Context) {
 	}
 
 	if err := rows.Err(); err != nil {
-		log.Printf("Error iterating deployment rows: %v", err)
+		slog.Error("Error iterating deployment rows", "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to read deployment data",
 		})
@@ -167,7 +167,7 @@ func (app *App) listDeployments(c *gin.Context) {
 		TotalPages:  totalPages,
 	}
 
-	log.Printf("User %s retrieved %d deployments (page %d/%d)", userClaims.Email, len(deployments), page, totalPages)
+	slog.Info("Retrieved deployments", "user", userClaims.Email, "count", len(deployments), "page", page, "total_pages", totalPages)
 
 	c.JSON(http.StatusOK, response)
 }

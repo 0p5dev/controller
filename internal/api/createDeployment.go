@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 
@@ -40,13 +40,12 @@ func (app *App) createDeployment(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 	userClaims, err := tools.GetUserClaims(authHeader)
 	if err != nil {
-		log.Printf("Authentication error: %v", err)
+		slog.Error("Failed to authenticate user", "error", err.Error())
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 			"error": "Unauthorized: " + err.Error(),
 		})
 		return
 	}
-	log.Printf("Authenticated user: %s", userClaims.Email)
 
 	var req RequestBody
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -70,7 +69,7 @@ func (app *App) createDeployment(c *gin.Context) {
 	var existingDeploymentId string
 	rows, err := app.Pool.Query(c.Request.Context(), `SELECT id FROM deployments WHERE name=$1 AND user_email=$2`, req.Name, userClaims.Email)
 	if err != nil {
-		log.Printf("DB query error: %v", err)
+		slog.Error("Failed to check existing deployments", "error", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to check existing deployments: %v", err),
 		})
@@ -81,7 +80,7 @@ func (app *App) createDeployment(c *gin.Context) {
 	if rows.Next() {
 		updateNeeded = true
 		if err := rows.Scan(&existingDeploymentId); err != nil {
-			log.Printf("DB scan error: %v", err)
+			slog.Error("Failed to scan deployment ID", "error", err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"error": fmt.Sprintf("Failed to scan deployment ID: %v", err),
 			})
@@ -145,7 +144,7 @@ func (app *App) createDeployment(c *gin.Context) {
 
 	s, err := auto.UpsertStackInlineSource(ctx, stackName, projectName, createCloudRunService)
 	if err != nil {
-		log.Printf("Stack creation error: %v", err)
+		slog.Error("Failed to create or select stack", "error", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to create or select stack: %v", err),
 		})
@@ -155,7 +154,7 @@ func (app *App) createDeployment(c *gin.Context) {
 	w := s.Workspace()
 	err = w.InstallPlugin(ctx, "gcp", "v9.3.0")
 	if err != nil {
-		log.Printf("Plugin install error: %v", err)
+		slog.Error("Failed to install GCP plugin", "error", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to install GCP plugin: %v", err),
 		})
@@ -166,7 +165,7 @@ func (app *App) createDeployment(c *gin.Context) {
 
 	_, err = s.Refresh(ctx)
 	if err != nil {
-		log.Printf("Refresh error: %v", err)
+		slog.Error("Failed to refresh stack", "error", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to refresh stack: %v", err),
 		})
@@ -177,7 +176,7 @@ func (app *App) createDeployment(c *gin.Context) {
 
 	output, err := s.Up(ctx, stdoutStreamer)
 	if err != nil {
-		log.Printf("Deployment error: %v", err)
+		slog.Error("Failed to update stack", "error", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to update stack: %v", err),
 		})
@@ -186,7 +185,7 @@ func (app *App) createDeployment(c *gin.Context) {
 
 	// Check for errors in the deployment output
 	if output.Summary.ResourceChanges == nil || len(*output.Summary.ResourceChanges) == 0 {
-		log.Printf("No resource changes detected - possible deployment issue")
+		slog.Error("Deployment completed but no resources were changed", "resourceChanges", output.Summary.ResourceChanges)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "Deployment completed but no resources were changed",
 		})
@@ -201,7 +200,7 @@ func (app *App) createDeployment(c *gin.Context) {
 	}
 
 	if totalChanges == 0 {
-		log.Printf("No resource operations performed")
+		slog.Error("Deployment completed but no resources were processed", "totalChanges", totalChanges)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "Deployment completed but no resources were processed",
 		})
@@ -211,9 +210,9 @@ func (app *App) createDeployment(c *gin.Context) {
 	// Get the service URL from stack outputs
 	outputs, err := s.Outputs(ctx)
 	if err != nil {
-		log.Printf("Failed to get stack outputs: %v", err)
+		slog.Error("Deployment succeeded but failed to get service URL", "error", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": "Deployment succeeded but failed to get service URL",
+			"error": "Deployment succeeded but failed to get service URL. Check your 0p5.dev dashboard to retrieve the service URL.",
 		})
 		return
 	}
@@ -221,27 +220,27 @@ func (app *App) createDeployment(c *gin.Context) {
 	var serviceUrl string
 	if urlOutput, exists := outputs["serviceUrl"]; exists {
 		serviceUrl = urlOutput.Value.(string)
-		log.Printf("Service deployed successfully at: %s", serviceUrl)
+		slog.Info("Deployment successful", "serviceUrl", serviceUrl)
 	} else {
-		log.Printf("Warning: serviceUrl not found in stack outputs")
+		slog.Warn("serviceUrl not found in stack outputs", "outputs", outputs)
 		serviceUrl = "URL not available"
 	}
 
 	// Log the resource changes for debugging
-	log.Printf("Deployment completed successfully. Resource changes: %+v", resourceChanges)
+	slog.Info("Deployment completed successfully", "resourceChanges", resourceChanges)
 
 	// Record deployment in database
 	if updateNeeded {
 		_, err := app.Pool.Exec(ctx, `UPDATE deployments SET container_image=$1, min_instances=$2, max_instances=$3 WHERE id=$4`, req.ContainerImage, req.MinInstances, req.MaxInstances, existingDeploymentId)
 		if err != nil {
-			log.Printf("DB update error: %v", err)
+			slog.Error("Failed to update deployment record", "error", err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"error": fmt.Sprintf("Failed to update deployment record: %v", err),
 			})
 			return
 		}
 
-		log.Printf("Deployment %s updated with new container image %s", req.Name, req.ContainerImage)
+		slog.Info("Deployment updated successfully", "name", req.Name, "container_image", req.ContainerImage)
 		c.JSON(http.StatusOK, gin.H{
 			"service_url": serviceUrl,
 		})
@@ -252,7 +251,7 @@ func (app *App) createDeployment(c *gin.Context) {
 				VALUES ($1, $2, $3, $4, $5, $6) 
 			`, req.Name, serviceUrl, req.ContainerImage, userClaims.Email, req.MinInstances, req.MaxInstances)
 		if err != nil {
-			log.Printf("DB insert error: %v", err)
+			slog.Error("Failed to record deployment in database", "error", err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"error": fmt.Sprintf("Failed to record deployment in database: %v", err),
 			})

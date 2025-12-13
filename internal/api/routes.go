@@ -1,22 +1,13 @@
 package api
 
 import (
+	_ "github.com/digizyne/lfcont/docs"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-
-	_ "github.com/digizyne/lfcont/docs"
 )
 
-type App struct {
-	Pool *pgxpool.Pool
-}
-
-func InitializeApp(router *gin.Engine, pool *pgxpool.Pool) {
-	app := &App{Pool: pool}
-
+func (app *App) CreateRoutes(router *gin.Engine) {
 	url := ginSwagger.URL("http://localhost:8080/swagger/doc.json")
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, url))
 
