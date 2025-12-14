@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -14,20 +15,9 @@ import (
 // @Failure 500 {object} map[string]interface{} "Service is unhealthy"
 // @Router /health [get]
 func (app *App) CheckHealth(c *gin.Context) {
-	// authHeader := c.GetHeader("Authorization")
-	// userClaims, err := tools.GetUserClaims(authHeader)
-	// if err != nil {
-	// 	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-	// 		"error": "Unauthorized: " + err.Error(),
-	// 	})
-	// 	return
-	// }
-	// c.JSON(http.StatusOK, gin.H{
-	// 	"claims": userClaims,
-	// })
-	// return
 	ctx := c.Request.Context()
 	if _, err := app.Pool.Exec(ctx, "SELECT version()"); err != nil {
+		slog.Error("failed to query postgres version", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":  "failed to query postgres version",
 			"detail": err,

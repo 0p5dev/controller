@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/digizyne/lfcont/tools"
+	sharedtypes "github.com/digizyne/lfcont/pkg/sharedTypes"
 )
 
 type CloudRunServiceDetails struct {
@@ -55,16 +55,7 @@ type ServiceMetrics struct {
 // @Failure 500 {object} map[string]string "Failed to retrieve deployment"
 // @Router /deployments/{name} [get]
 func (app *App) getDeploymentByName(c *gin.Context) {
-	// Extract user claims for authentication and filtering
-	authHeader := c.GetHeader("Authorization")
-	userClaims, err := tools.GetUserClaims(authHeader)
-	if err != nil {
-		log.Printf("Authentication error: %v", err)
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"error": "Unauthorized: " + err.Error(),
-		})
-		return
-	}
+	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
 
 	deploymentName := c.Param("name")
 	if deploymentName == "" {
@@ -81,9 +72,9 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 	// Verify the deployment belongs to the authenticated user
 	dbCtx := c.Request.Context()
 	var deploymentId string
-	err = app.Pool.QueryRow(dbCtx, "SELECT id FROM deployments WHERE name = $1 AND user_email = $2", deploymentName, userClaims.Email).Scan(&deploymentId)
+	err := app.Pool.QueryRow(dbCtx, "SELECT id FROM deployments WHERE name = $1 AND user_email = $2", deploymentName, userClaims.Email).Scan(&deploymentId)
 	if err != nil {
-		log.Printf("Error finding deployment %s for user %s: %v", deploymentName, userClaims.Email, err)
+		slog.Error("Error finding deployment", "deployment", deploymentName, "user", userClaims.Email, "error", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "deployment not found",
 		})
@@ -93,7 +84,7 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 	// Create Cloud Run client
 	runClient, err := run.NewServicesClient(ctx)
 	if err != nil {
-		log.Printf("Failed to create Cloud Run client: %v", err)
+		slog.Error("Failed to create Cloud Run client", "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to initialize Cloud Run client",
 		})
@@ -110,7 +101,7 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 
 	service, err := runClient.GetService(ctx, req)
 	if err != nil {
-		log.Printf("Failed to get service %s: %v", deploymentName, err)
+		slog.Error("Failed to get service", "deployment", deploymentName, "error", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "Cloud Run service not found",
 		})
@@ -140,7 +131,7 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 	// Get metrics from Cloud Monitoring
 	metrics, err := getServiceMetrics(ctx, projectID, location, deploymentName)
 	if err != nil {
-		log.Printf("Failed to get metrics for %s: %v", deploymentName, err)
+		slog.Warn("Failed to get metrics", "deployment", deploymentName, "error", err)
 		// Don't fail the request, just return empty metrics
 		metrics = ServiceMetrics{
 			RequestsPerHour: [24]int{},
@@ -180,7 +171,7 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 		details.Status = "Unknown"
 	}
 
-	log.Printf("User %s retrieved details for deployment %s", userClaims.Email, deploymentName)
+	slog.Info("Retrieved deployment details", "user", userClaims.Email, "deployment", deploymentName)
 
 	c.JSON(http.StatusOK, details)
 }
@@ -201,14 +192,14 @@ func getServiceMetrics(ctx context.Context, projectID, location, serviceName str
 	// Get request count metrics with 1-hour alignment
 	requestsPerHour, err := getHourlyRequests(ctx, monitoringClient, projectID, location, serviceName, startTime, endTime)
 	if err != nil {
-		log.Printf("Failed to get hourly request metrics: %v", err)
+		slog.Warn("Failed to get hourly request metrics", "error", err)
 		requestsPerHour = [24]int{}
 	}
 
 	// Get CPU utilization metrics with 1-hour alignment
 	cpuPerHour, err := getHourlyCPU(ctx, monitoringClient, projectID, location, serviceName, startTime, endTime)
 	if err != nil {
-		log.Printf("Failed to get hourly CPU metrics: %v", err)
+		slog.Warn("Failed to get hourly CPU metrics", "error", err)
 		cpuPerHour = [24]int{}
 	}
 

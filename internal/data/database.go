@@ -3,7 +3,7 @@ package data
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -30,7 +30,7 @@ func InitializeDatabase() (*pgxpool.Pool, error) {
 	}
 
 	for _, migration := range migrations {
-		log.Printf("Running migration: %s", migration.name)
+		slog.Info("Running migration", "name", migration.name)
 		if err := migration.fn(pool); err != nil {
 			pool.Close()
 			return nil, fmt.Errorf("failed to migrate %s table: %v", migration.name, err)

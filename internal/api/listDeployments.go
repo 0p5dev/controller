@@ -2,7 +2,7 @@ package api
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/digizyne/lfcont/internal/data/models"
-	"github.com/digizyne/lfcont/tools"
+	sharedtypes "github.com/digizyne/lfcont/pkg/sharedTypes"
 )
 
 type PaginatedDeploymentsResponse struct {
@@ -35,16 +35,7 @@ type PaginatedDeploymentsResponse struct {
 // @Failure 500 {object} map[string]string "Failed to retrieve deployments"
 // @Router /deployments [get]
 func (app *App) listDeployments(c *gin.Context) {
-	// Extract user claims for authentication and filtering
-	authHeader := c.GetHeader("Authorization")
-	userClaims, err := tools.GetUserClaims(authHeader)
-	if err != nil {
-		log.Printf("Authentication error: %v", err)
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"error": "Unauthorized: " + err.Error(),
-		})
-		return
-	}
+	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
 
 	ctx := c.Request.Context()
 
@@ -95,7 +86,7 @@ func (app *App) listDeployments(c *gin.Context) {
 	var totalCount int
 	err = app.Pool.QueryRow(ctx, countQuery, args...).Scan(&totalCount)
 	if err != nil {
-		log.Printf("Error counting deployments: %v", err)
+		slog.Error("Error counting deployments", "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to count deployments",
 		})
@@ -104,9 +95,9 @@ func (app *App) listDeployments(c *gin.Context) {
 
 	// Get deployments with pagination
 	query := fmt.Sprintf(`
-		SELECT * FROM deployments 
-		%s 
-		ORDER BY name ASC 
+		SELECT * FROM deployments
+		%s
+		ORDER BY name ASC
 		LIMIT $%d OFFSET $%d
 	`, whereClause, argIndex, argIndex+1)
 
@@ -115,7 +106,7 @@ func (app *App) listDeployments(c *gin.Context) {
 
 	rows, err := app.Pool.Query(ctx, query, args...)
 	if err != nil {
-		log.Printf("Error querying deployments: %v", err)
+		slog.Error("Error querying deployments", "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to query deployments",
 		})
@@ -138,7 +129,7 @@ func (app *App) listDeployments(c *gin.Context) {
 			&deployment.UpdatedAt,
 		)
 		if err != nil {
-			log.Printf("Error scanning deployment row: %v", err)
+			slog.Error("Error scanning deployment row", "error", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to parse deployment data",
 			})
@@ -148,7 +139,7 @@ func (app *App) listDeployments(c *gin.Context) {
 	}
 
 	if err := rows.Err(); err != nil {
-		log.Printf("Error iterating deployment rows: %v", err)
+		slog.Error("Error iterating deployment rows", "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to read deployment data",
 		})
@@ -167,7 +158,7 @@ func (app *App) listDeployments(c *gin.Context) {
 		TotalPages:  totalPages,
 	}
 
-	log.Printf("User %s retrieved %d deployments (page %d/%d)", userClaims.Email, len(deployments), page, totalPages)
+	slog.Info("Retrieved deployments", "user", userClaims.Email, "count", len(deployments), "page", page, "total_pages", totalPages)
 
 	c.JSON(http.StatusOK, response)
 }
