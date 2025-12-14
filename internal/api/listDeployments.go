@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/digizyne/lfcont/internal/data/models"
-	"github.com/digizyne/lfcont/tools"
+	sharedtypes "github.com/digizyne/lfcont/pkg/sharedTypes"
 )
 
 type PaginatedDeploymentsResponse struct {
@@ -35,16 +35,7 @@ type PaginatedDeploymentsResponse struct {
 // @Failure 500 {object} map[string]string "Failed to retrieve deployments"
 // @Router /deployments [get]
 func (app *App) listDeployments(c *gin.Context) {
-	// Extract user claims for authentication and filtering
-	authHeader := c.GetHeader("Authorization")
-	userClaims, err := tools.GetUserClaims(authHeader)
-	if err != nil {
-		slog.Error("Authentication error", "error", err)
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"error": "Unauthorized: " + err.Error(),
-		})
-		return
-	}
+	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
 
 	ctx := c.Request.Context()
 
@@ -104,9 +95,9 @@ func (app *App) listDeployments(c *gin.Context) {
 
 	// Get deployments with pagination
 	query := fmt.Sprintf(`
-		SELECT * FROM deployments 
-		%s 
-		ORDER BY name ASC 
+		SELECT * FROM deployments
+		%s
+		ORDER BY name ASC
 		LIMIT $%d OFFSET $%d
 	`, whereClause, argIndex, argIndex+1)
 

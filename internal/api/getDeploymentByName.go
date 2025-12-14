@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/digizyne/lfcont/tools"
+	sharedtypes "github.com/digizyne/lfcont/pkg/sharedTypes"
 )
 
 type CloudRunServiceDetails struct {
@@ -55,16 +55,7 @@ type ServiceMetrics struct {
 // @Failure 500 {object} map[string]string "Failed to retrieve deployment"
 // @Router /deployments/{name} [get]
 func (app *App) getDeploymentByName(c *gin.Context) {
-	// Extract user claims for authentication and filtering
-	authHeader := c.GetHeader("Authorization")
-	userClaims, err := tools.GetUserClaims(authHeader)
-	if err != nil {
-		slog.Error("Authentication error", "error", err)
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"error": "Unauthorized: " + err.Error(),
-		})
-		return
-	}
+	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
 
 	deploymentName := c.Param("name")
 	if deploymentName == "" {
@@ -81,7 +72,7 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 	// Verify the deployment belongs to the authenticated user
 	dbCtx := c.Request.Context()
 	var deploymentId string
-	err = app.Pool.QueryRow(dbCtx, "SELECT id FROM deployments WHERE name = $1 AND user_email = $2", deploymentName, userClaims.Email).Scan(&deploymentId)
+	err := app.Pool.QueryRow(dbCtx, "SELECT id FROM deployments WHERE name = $1 AND user_email = $2", deploymentName, userClaims.Email).Scan(&deploymentId)
 	if err != nil {
 		slog.Error("Error finding deployment", "deployment", deploymentName, "user", userClaims.Email, "error", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{

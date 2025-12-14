@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/digizyne/lfcont/tools"
+	sharedtypes "github.com/digizyne/lfcont/pkg/sharedTypes"
 	"github.com/gin-gonic/gin"
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/cloudrunv2"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
@@ -37,15 +37,7 @@ type RequestBody struct {
 // @Failure 500 {object} map[string]string "Deployment failed"
 // @Router /deployments [post]
 func (app *App) createDeployment(c *gin.Context) {
-	authHeader := c.GetHeader("Authorization")
-	userClaims, err := tools.GetUserClaims(authHeader)
-	if err != nil {
-		slog.Error("Failed to authenticate user", "error", err.Error())
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"error": "Unauthorized: " + err.Error(),
-		})
-		return
-	}
+	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
 
 	var req RequestBody
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -248,7 +240,7 @@ func (app *App) createDeployment(c *gin.Context) {
 	} else {
 		_, err = app.Pool.Exec(ctx, `
 				INSERT INTO deployments (name, url, container_image, user_email, min_instances, max_instances)
-				VALUES ($1, $2, $3, $4, $5, $6) 
+				VALUES ($1, $2, $3, $4, $5, $6)
 			`, req.Name, serviceUrl, req.ContainerImage, userClaims.Email, req.MinInstances, req.MaxInstances)
 		if err != nil {
 			slog.Error("Failed to record deployment in database", "error", err.Error())

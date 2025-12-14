@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/moby/moby/client"
 
-	"github.com/digizyne/lfcont/tools"
+	sharedtypes "github.com/digizyne/lfcont/pkg/sharedTypes"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/daemon"
@@ -19,7 +19,62 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/uuid"
+
+	"bufio"
+	"encoding/json"
+	"strings"
 )
+
+type ImageDetails struct {
+	ImageID   string
+	ImageName string
+}
+
+func getContainerImageDetails(imageLoadResponse client.LoadResponse) (ImageDetails, error) {
+	var imageID string
+	scanner := bufio.NewScanner(imageLoadResponse.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, "Loaded image ID:") {
+			var result map[string]interface{}
+			if err := json.Unmarshal([]byte(line), &result); err == nil {
+				if stream, ok := result["stream"].(string); ok {
+					if strings.HasPrefix(stream, "Loaded image ID: ") {
+						imageID = strings.TrimPrefix(stream, "Loaded image ID: ")
+						imageID = strings.TrimSpace(imageID)
+						break
+					}
+				}
+			}
+		} else if strings.Contains(line, "Loaded image:") {
+			var result map[string]interface{}
+			if err := json.Unmarshal([]byte(line), &result); err == nil {
+				if stream, ok := result["stream"].(string); ok {
+					if strings.HasPrefix(stream, "Loaded image: ") {
+						imageID = strings.TrimPrefix(stream, "Loaded image: ")
+						imageID = strings.TrimSpace(imageID)
+						break
+					}
+				}
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return ImageDetails{}, fmt.Errorf("error reading ImageLoad response: %v", err)
+	}
+
+	if imageID == "" {
+		return ImageDetails{}, fmt.Errorf("could not extract image ID from ImageLoad response")
+	}
+
+	imageName := strings.Split(imageID, ":")[0]
+
+	return ImageDetails{
+		ImageID:   imageID,
+		ImageName: imageName,
+	}, nil
+}
 
 // @Summary Push container image to registry
 // @Description Upload a container image tarball and push it to Google Artifact Registry
@@ -34,17 +89,9 @@ import (
 // @Failure 500 {object} map[string]string "Failed to push image"
 // @Router /container-images [post]
 func (app *App) pushToContainerRegistry(c *gin.Context) {
-	ctx := context.Background()
+	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
 
-	authHeader := c.GetHeader("Authorization")
-	userClaims, err := tools.GetUserClaims(authHeader)
-	if err != nil {
-		slog.Error("Authentication error", "error", err)
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"error": "Unauthorized: " + err.Error(),
-		})
-		return
-	}
+	ctx := context.Background()
 
 	// Initialize Docker client
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -85,7 +132,7 @@ func (app *App) pushToContainerRegistry(c *gin.Context) {
 	defer imageLoadResponse.Body.Close()
 
 	// Get image details (specifically image ID and name so that we can tag it)
-	imageDetails, err := tools.GetContainerImageDetails(imageLoadResponse)
+	imageDetails, err := getContainerImageDetails(imageLoadResponse)
 	if err != nil {
 		slog.Error("Error getting image details", "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
