@@ -23,5 +23,5 @@ func (app *App) CreateRoutes(router *gin.Engine) {
 	deployments.Use(middleware.AuthMiddleware())
 	deployments.GET("/:name", app.getDeploymentByName)
 	deployments.GET("", app.listDeployments)
-	deployments.POST("", app.createDeployment)
+	deployments.PUT("", app.createDeployment)
 }
