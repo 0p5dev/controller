@@ -1,4 +1,8 @@
 name: lfcont
+networks:
+  0p5dev:
+    driver: bridge
+    name: 0p5dev
 services:
   controller:
     build:
@@ -19,6 +23,8 @@ services:
         required: false
     entrypoint: ["/bin/sh", "-c"]
     command: ["go install github.com/air-verse/air@latest && air -c .air.toml"]
+    networks:
+      - 0p5dev
     env_file:
       - .env
     profiles:

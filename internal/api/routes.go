@@ -24,4 +24,5 @@ func (app *App) CreateRoutes(router *gin.Engine) {
 	deployments.GET("/:name", app.getDeploymentByName)
 	deployments.GET("", app.listDeployments)
 	deployments.PUT("", app.createDeployment)
+	deployments.DELETE("/:name", app.deleteDeploymentByName)
 }

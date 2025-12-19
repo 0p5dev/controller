@@ -22,6 +22,7 @@ type RequestBody struct {
 	ContainerImage string `json:"container_image"`
 	MinInstances   int    `json:"min_instances,omitempty"`
 	MaxInstances   int    `json:"max_instances,omitempty"`
+	Port           int    `json:"port,omitempty"`
 }
 
 // @Summary Create a new deployment
@@ -54,6 +55,9 @@ func (app *App) createDeployment(c *gin.Context) {
 	}
 	if req.MaxInstances == 0 {
 		req.MaxInstances = 1
+	}
+	if req.Port == 0 {
+		req.Port = 8080
 	}
 
 	// Check for existing deployment with the same name
@@ -97,6 +101,9 @@ func (app *App) createDeployment(c *gin.Context) {
 				Containers: cloudrunv2.ServiceTemplateContainerArray{
 					&cloudrunv2.ServiceTemplateContainerArgs{
 						Image: pulumi.String(req.ContainerImage),
+						Ports: &cloudrunv2.ServiceTemplateContainerPortsArgs{
+							ContainerPort: pulumi.Int(req.Port),
+						},
 					},
 				},
 			},
