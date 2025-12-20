@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -171,7 +172,9 @@ func (app *App) createDeployment(c *gin.Context) {
 		return
 	}
 
-	stdoutStreamer := optup.ProgressStreams(os.Stdout)
+	// Capture Pulumi output to buffer
+	var outputBuffer bytes.Buffer
+	stdoutStreamer := optup.ProgressStreams(&outputBuffer)
 
 	output, err := s.Up(ctx, stdoutStreamer)
 	if err != nil {
@@ -180,6 +183,11 @@ func (app *App) createDeployment(c *gin.Context) {
 			"error": fmt.Sprintf("Failed to update stack: %v", err),
 		})
 		return
+	}
+
+	// Output all Pulumi logs at once
+	if outputBuffer.Len() > 0 {
+		fmt.Print(outputBuffer.String())
 	}
 
 	// Check for errors in the deployment output
