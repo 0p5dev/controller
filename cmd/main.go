@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/digizyne/lfcont/internal/api"
+	"github.com/0p5dev/controller/internal/api"
 )
 
 // @title           OpsController API
@@ -30,8 +30,13 @@ import (
 // @description Type "Bearer" followed by a space and JWT token.
 
 func main() {
+	ginMode := os.Getenv("GIN_MODE")
+	if ginMode == "" {
+		ginMode = "development"
+	}
+	gin.SetMode(ginMode)
 	router := gin.New()
-	dbConnectionPool, err := api.InitializeApp(router)
+	dbConnectionPool, err := api.Initialize(router)
 	if err != nil {
 		slog.Error("Failed to initialize application", "error", err)
 		os.Exit(1)

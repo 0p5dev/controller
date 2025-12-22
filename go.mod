@@ -1,4 +1,4 @@
-module github.com/digizyne/lfcont
+module github.com/0p5dev/controller
 
 go 1.25.3
 

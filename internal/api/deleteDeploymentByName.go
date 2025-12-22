@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/storage"
-	sharedtypes "github.com/digizyne/lfcont/pkg/sharedTypes"
+	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
 	"github.com/gin-gonic/gin"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
@@ -136,7 +136,7 @@ func (app *App) deleteDeploymentByName(c *gin.Context) {
 	}
 
 	// Delete the Cloud Storage directory
-	bucketName := "lf-controller-pulumi-state-staging"
+	bucketName := os.Getenv("PULUMI_STATE_BUCKET")
 	projectPrefix := fmt.Sprintf("project-%s", deploymentName)
 
 	storageClient, err := storage.NewClient(ctx)

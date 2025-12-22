@@ -8,15 +8,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/digizyne/lfcont/internal/data"
-	"github.com/digizyne/lfcont/internal/middleware"
+	"github.com/0p5dev/controller/internal/data"
+	"github.com/0p5dev/controller/internal/middleware"
 )
 
 type App struct {
 	Pool *pgxpool.Pool
 }
 
-func InitializeApp(router *gin.Engine) (*pgxpool.Pool, error) {
+func Initialize(router *gin.Engine) (*pgxpool.Pool, error) {
 	pool, err := data.InitializeDatabase()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)

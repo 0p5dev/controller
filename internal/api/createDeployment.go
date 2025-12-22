@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"os"
 
-	sharedtypes "github.com/digizyne/lfcont/pkg/sharedTypes"
+	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
 	"github.com/gin-gonic/gin"
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/cloudrunv2"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"

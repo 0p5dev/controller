@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/digizyne/lfcont/internal/data/models"
+	"github.com/0p5dev/controller/internal/data/models"
 )
 
 func InitializeDatabase() (*pgxpool.Pool, error) {

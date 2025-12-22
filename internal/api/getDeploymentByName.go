@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	sharedtypes "github.com/digizyne/lfcont/pkg/sharedTypes"
+	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
 )
 
 type CloudRunServiceDetails struct {

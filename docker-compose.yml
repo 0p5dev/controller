@@ -1,4 +1,4 @@
-name: lfcont
+name: controller
 networks:
   0p5dev:
     driver: bridge
@@ -9,7 +9,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: development
-    container_name: lfcont
+    container_name: controller
     volumes:
       - ./:/app
       - /var/run/docker.sock:/var/run/docker.sock
@@ -33,7 +33,7 @@ services:
 
   postgres:
     image: postgres
-    container_name: lfcont-db
+    container_name: controller-db
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres

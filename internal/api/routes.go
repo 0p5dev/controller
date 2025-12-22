@@ -1,8 +1,8 @@
 package api
 
 import (
-	_ "github.com/digizyne/lfcont/docs"
-	"github.com/digizyne/lfcont/internal/middleware"
+	_ "github.com/0p5dev/controller/docs"
+	"github.com/0p5dev/controller/internal/middleware"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
