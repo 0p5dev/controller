@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/cloudrunv2"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optup"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
@@ -135,6 +136,19 @@ func (app *App) createDeployment(c *gin.Context) {
 
 	ctx := context.Background()
 
+	// Create cancellable context from the HTTP request context
+	// This allows us to cancel Pulumi operations if the client disconnects
+	reqCtx := c.Request.Context()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Monitor for client disconnection
+	go func() {
+		<-reqCtx.Done()
+		slog.Info("Client disconnected, cancelling deployment", "deployment", req.Name)
+		cancel()
+	}()
+
 	// Create unique stack name using hash of email to ensure each deployment creates a new service
 	hash := sha256.Sum256([]byte(userClaims.Email))
 	userHash := hex.EncodeToString(hash[:])[:8] // Use first 8 characters of hash
@@ -178,6 +192,45 @@ func (app *App) createDeployment(c *gin.Context) {
 
 	output, err := s.Up(ctx, stdoutStreamer)
 	if err != nil {
+		// Check if cancellation was the cause
+		if ctx.Err() != nil {
+			slog.Info("Deployment cancelled, initiating cleanup", "deployment", req.Name)
+
+			// Use fresh context for cleanup operations
+			cleanupCtx := context.Background()
+
+			// Attempt to destroy partially created resources
+			var destroyBuffer bytes.Buffer
+			destroyStreamer := optdestroy.ProgressStreams(&destroyBuffer)
+			if _, destroyErr := s.Destroy(cleanupCtx, destroyStreamer); destroyErr != nil {
+				slog.Error("Failed to cleanup after cancellation", "error", destroyErr.Error())
+				// Don't attempt to remove stack if destroy failed due to locks
+				c.AbortWithStatusJSON(http.StatusRequestTimeout, gin.H{
+					"error": "Deployment cancelled by client. Some resources may need manual cleanup.",
+				})
+				return
+			} else {
+				slog.Info("Successfully cleaned up resources after cancellation", "deployment", req.Name)
+			}
+
+			// Remove the stack to clean up all state (only if destroy succeeded)
+			if removeErr := w.RemoveStack(cleanupCtx, stackName); removeErr != nil {
+				slog.Warn("Failed to remove stack after cancellation", "stack", stackName, "error", removeErr.Error())
+			} else {
+				slog.Info("Successfully removed stack state after cancellation", "stack", stackName)
+			}
+
+			// Clean up Pulumi state files from Cloud Storage
+			if cleanupErr := cleanupPulumiStateFiles(cleanupCtx, req.Name); cleanupErr != nil {
+				slog.Warn("Failed to cleanup Pulumi state files after cancellation", "error", cleanupErr.Error())
+				// Continue even if cleanup fails
+			}
+
+			c.AbortWithStatusJSON(http.StatusRequestTimeout, gin.H{
+				"error": "Deployment cancelled by client",
+			})
+			return
+		}
 		slog.Error("Failed to update stack", "error", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to update stack: %v", err),
