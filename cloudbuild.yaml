@@ -17,6 +17,7 @@ steps:
         buildah build \
           --tag $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA \
           --tag $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest \
+          --build-arg PULUMI_STATE_BUCKET=$_PULUMI_STATE_BUCKET \
           --file ./Dockerfile \
           --format docker \
           --layers \
@@ -59,6 +60,7 @@ substitutions:
   _AR_HOSTNAME: us-central1-docker.pkg.dev
   _AR_REPOSITORY: open-source-application-images
   _AR_PROJECT_ID: local-first-476300
+  _PULUMI_STATE_BUCKET: lf-controller-pulumi-state-staging
 
 tags:
   - development
