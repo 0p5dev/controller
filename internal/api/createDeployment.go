@@ -49,6 +49,8 @@ func (app *App) createDeployment(c *gin.Context) {
 		return
 	}
 
+	slog.Info("Received request to create deployment", "deployment", req.Name, "user", userClaims.Email)
+
 	// Set default values if not provided
 	if req.MinInstances == 0 {
 		req.MinInstances = 0

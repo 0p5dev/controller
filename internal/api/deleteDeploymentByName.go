@@ -30,6 +30,7 @@ import (
 // @Failure 500 {object} map[string]string "Failed to delete deployment"
 // @Router /deployments/{name} [delete]
 func (app *App) deleteDeploymentByName(c *gin.Context) {
+
 	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
 
 	deploymentName := c.Param("name")
@@ -39,6 +40,8 @@ func (app *App) deleteDeploymentByName(c *gin.Context) {
 		})
 		return
 	}
+
+	slog.Info("Received request to delete deployment", "deployment", deploymentName, "user", userClaims.Email)
 
 	ctx := context.Background()
 
