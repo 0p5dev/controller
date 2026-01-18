@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	sharedtypes "github.com/digizyne/lfcont/pkg/sharedTypes"
+	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
 	"github.com/golang-jwt/jwt/v5"
 )
 

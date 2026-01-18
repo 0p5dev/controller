@@ -49,11 +49,11 @@ go install github.com/swaggo/swag/cmd/swag@latest
 
 ## Quick Start
 
-### 1. Clone and Setup
+### 1. Clone and Setup  
 
 ```bash
-git clone https://github.com/digizyne/lfcont.git
-cd lfcont
+git clone https://github.com/0p5dev/controller.git
+cd controller
 
 # Install Go dependencies
 just tidy
@@ -333,7 +333,7 @@ just down
 docker ps | grep postgres
 
 # Check logs
-docker logs lfcont-db
+docker logs controller-db
 
 # Verify environment variables
 cat .env
@@ -346,7 +346,7 @@ cat .env
 which air
 
 # Check Air logs in the container
-docker logs lfcont
+docker logs controller
 ```
 
 ## Contributing

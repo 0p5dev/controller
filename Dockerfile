@@ -2,7 +2,8 @@ FROM golang:1.25.3-trixie AS development
 WORKDIR /app
 COPY go.mod go.sum sakey.json ./
 ENV GOOGLE_APPLICATION_CREDENTIALS=/app/sakey.json
-RUN go mod download && curl -fsSL https://get.pulumi.com | sh && /root/.pulumi/bin/pulumi login gs://lf-controller-pulumi-state-staging
+ARG PULUMI_STATE_BUCKET
+RUN go mod download && curl -fsSL https://get.pulumi.com | sh && /root/.pulumi/bin/pulumi login gs://${PULUMI_STATE_BUCKET}
 ENV PATH="/root/.pulumi/bin:${PATH}" 
 COPY . .
 
@@ -18,4 +19,4 @@ ENV GOOGLE_APPLICATION_CREDENTIALS=/app/sakey.json
 ENV PATH="/root/.pulumi/bin:${PATH}"
 EXPOSE 8080
 ENTRYPOINT [ "sh", "-c" ]
-CMD ["pulumi login gs://lf-controller-pulumi-state-staging && ./controller" ]
+CMD ["pulumi login gs://${PULUMI_STATE_BUCKET} && ./controller" ]

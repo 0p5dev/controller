@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,7 +10,7 @@ import (
 	"net/http"
 	"os"
 
-	sharedtypes "github.com/digizyne/lfcont/pkg/sharedTypes"
+	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
 	"github.com/gin-gonic/gin"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
@@ -30,6 +31,7 @@ import (
 // @Failure 500 {object} map[string]string "Failed to delete deployment"
 // @Router /deployments/{name} [delete]
 func (app *App) deleteDeploymentByName(c *gin.Context) {
+
 	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
 
 	deploymentName := c.Param("name")
@@ -39,6 +41,8 @@ func (app *App) deleteDeploymentByName(c *gin.Context) {
 		})
 		return
 	}
+
+	slog.Info("Received request to delete deployment", "deployment", deploymentName, "user", userClaims.Email)
 
 	ctx := context.Background()
 
@@ -95,7 +99,9 @@ func (app *App) deleteDeploymentByName(c *gin.Context) {
 	}
 
 	// Destroy the stack (removes all Cloud Run resources)
-	stdoutStreamer := optdestroy.ProgressStreams(os.Stdout)
+	// Capture Pulumi output to buffer
+	var outputBuffer bytes.Buffer
+	stdoutStreamer := optdestroy.ProgressStreams(&outputBuffer)
 	_, err = s.Destroy(ctx, stdoutStreamer)
 	if err != nil {
 		slog.Error("Failed to destroy stack", "stack", stackName, "error", err)
@@ -103,6 +109,11 @@ func (app *App) deleteDeploymentByName(c *gin.Context) {
 			"error": fmt.Sprintf("Failed to destroy Cloud Run resources: %v", err),
 		})
 		return
+	}
+
+	// Output all Pulumi logs at once
+	if outputBuffer.Len() > 0 {
+		fmt.Print(outputBuffer.String())
 	}
 
 	slog.Info("Successfully destroyed stack", "stack", stackName)
@@ -122,6 +133,12 @@ func (app *App) deleteDeploymentByName(c *gin.Context) {
 			"error": fmt.Sprintf("Cloud Run resources destroyed but failed to delete database record: %v", err),
 		})
 		return
+	}
+
+	// Clean up Pulumi state files from Cloud Storage
+	if cleanupErr := cleanupPulumiStateFiles(ctx, deploymentName); cleanupErr != nil {
+		slog.Warn("Failed to cleanup Pulumi state files", "error", cleanupErr.Error())
+		// Continue even if cleanup fails
 	}
 
 	slog.Info("Successfully deleted deployment", "deployment", deploymentName, "user", userClaims.Email)

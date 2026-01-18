@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/digizyne/lfcont/internal/data/models"
-	sharedtypes "github.com/digizyne/lfcont/pkg/sharedTypes"
+	"github.com/0p5dev/controller/internal/data/models"
+	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
 )
 
 type PaginatedDeploymentsResponse struct {
