@@ -2,6 +2,7 @@ FROM golang:1.25.3-trixie AS development
 WORKDIR /app
 COPY go.mod go.sum sakey.json ./
 ENV GOOGLE_APPLICATION_CREDENTIALS=/app/sakey.json
+ARG PULUMI_STATE_BUCKET
 RUN go mod download && curl -fsSL https://get.pulumi.com | sh && /root/.pulumi/bin/pulumi login gs://${PULUMI_STATE_BUCKET}
 ENV PATH="/root/.pulumi/bin:${PATH}" 
 COPY . .
