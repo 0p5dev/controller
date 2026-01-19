@@ -28,7 +28,7 @@ type CloudRunServiceDetails struct {
 	CreatedTime string         `json:"created_time"`
 	UpdatedTime string         `json:"updated_time"`
 	Scaling     ServiceScaling `json:"scaling"`
-	Metrics     ServiceMetrics `json:"metrics"`
+	// Metrics     ServiceMetrics `json:"metrics"`
 }
 
 type ServiceScaling struct {
@@ -129,15 +129,15 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 	}
 
 	// Get metrics from Cloud Monitoring
-	metrics, err := getServiceMetrics(ctx, projectID, location, deploymentName)
-	if err != nil {
-		slog.Warn("Failed to get metrics", "deployment", deploymentName, "error", err)
-		// Don't fail the request, just return empty metrics
-		metrics = ServiceMetrics{
-			RequestsPerHour: [24]int{},
-			CPUPerHour:      [24]int{},
-		}
-	}
+	// metrics, err := getServiceMetrics(ctx, projectID, location, deploymentName)
+	// if err != nil {
+	// 	slog.Warn("Failed to get metrics", "deployment", deploymentName, "error", err)
+	// 	// Don't fail the request, just return empty metrics
+	// 	metrics = ServiceMetrics{
+	// 		RequestsPerHour: [24]int{},
+	// 		CPUPerHour:      [24]int{},
+	// 	}
+	// }
 
 	// Build response
 	details := CloudRunServiceDetails{
@@ -151,7 +151,7 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 			MinInstances: minInstances,
 			MaxInstances: maxInstances,
 		},
-		Metrics: metrics,
+		// Metrics: metrics,
 	}
 
 	// Determine status
@@ -251,7 +251,7 @@ func getHourlyRequests(ctx context.Context, client *monitoring.MetricClient, pro
 	}
 
 	// Fill the array with data points
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		if value, exists := dataPoints[i]; exists {
 			hourlyRequests[i] = int(value)
 		}
@@ -305,7 +305,7 @@ func getHourlyCPU(ctx context.Context, client *monitoring.MetricClient, projectI
 	}
 
 	// Fill the array with data points
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		if value, exists := dataPoints[i]; exists {
 			hourlyCPU[i] = int(value)
 		}
