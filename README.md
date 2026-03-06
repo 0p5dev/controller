@@ -67,9 +67,6 @@ Create a `.env` file in the project root:
 # Database Configuration
 DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
 
-# JWT Secret (generate a secure random string)
-JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
-
 # GCP Configuration
 GCP_PROJECT_ID=your-gcp-project-id
 GCP_REGION=us-central1

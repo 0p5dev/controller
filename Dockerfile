@@ -1,6 +1,6 @@
 FROM golang:1.26.1-trixie AS development
 WORKDIR /app
-COPY go.mod go.sum ./
+COPY go.mod go.sum sakey.json ./
 COPY . .
 
 FROM development AS build

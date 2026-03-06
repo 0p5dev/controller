@@ -12,7 +12,6 @@ services:
     container_name: controller
     volumes:
       - ./:/app
-      - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /app
     tty: true
     ports:

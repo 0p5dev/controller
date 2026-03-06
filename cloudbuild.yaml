@@ -29,23 +29,22 @@ steps:
         buildah push \
           $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest
 
-  - id: Ensure controller vm is running
-    name: "gcr.io/cloud-builders/gcloud"
+  - id: Deploy to Cloud Run
+    name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    secretEnv:
+      - POSTGRES_CONNECTION_STRING
+      - SUPABASE_JWT_SECRET
+    entrypoint: gcloud
     args:
-      - compute
-      - instances
-      - start
-      - controller-dev
-      - --zone=us-central1-f
-
-  - id: Deploy to controller vm
-    name: "gcr.io/cloud-builders/gcloud"
-    args:
-      - compute
-      - ssh
-      - cloud-build-sa@controller-dev
-      - --zone=us-central1-f
-      - --command=docker compose -f /app/docker-compose.yml down --rmi all --remove-orphans || true && docker compose -f /app/docker-compose.yml up -d
+      - run
+      - services
+      - update
+      - $_SERVICE_NAME
+      - --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+      - "--region=$_DEPLOY_REGION"
+      - "--quiet"
+      - "--set-env-vars"
+      - "POSTGRES_CONNECTION_STRING=$$POSTGRES_CONNECTION_STRING,SUPABASE_JWT_SECRET=$$SUPABASE_JWT_SECRET,GIN_MODE=$_GIN_MODE,GOOGLE_APPLICATION_CREDENTIALS=$_GOOGLE_APPLICATION_CREDENTIALS,AR_REPO_URL=$_AR_REPO_URL,GCP_PROJECT_ID=$_AR_PROJECT_ID,GCP_REGION=$_DEPLOY_REGION"
 
 serviceAccount: projects/local-first-476300/serviceAccounts/cloud-build-sa@local-first-476300.iam.gserviceaccount.com
 
@@ -54,13 +53,23 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 substitutions:
-  _SERVICE_NAME: controller
+  _SERVICE_NAME: controller-0p5dev
   _DEPLOY_REGION: us-central1
   _AR_HOSTNAME: us-central1-docker.pkg.dev
   _AR_REPOSITORY: open-source-application-images
   _AR_PROJECT_ID: local-first-476300
+  _AR_REPO_URL: us-central1-docker.pkg.dev/local-first-476300/container-images-dev
+  _GOOGLE_APPLICATION_CREDENTIALS: /app/sakey.json
+  _GIN_MODE: release
 
 tags:
   - development
   - controller
   - vm
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/160851347747/secrets/supabase_connection_string_dev/versions/1
+      env: "POSTGRES_CONNECTION_STRING"
+    - versionName: projects/160851347747/secrets/supabase_jwt_secret_dev/versions/1
+      env: "SUPABASE_JWT_SECRET"
