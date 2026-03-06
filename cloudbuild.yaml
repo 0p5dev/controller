@@ -34,17 +34,16 @@ steps:
     secretEnv:
       - POSTGRES_CONNECTION_STRING
       - SUPABASE_JWT_SECRET
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      - run
-      - services
-      - update
-      - $_SERVICE_NAME
-      - --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
-      - "--region=$_DEPLOY_REGION"
-      - "--quiet"
-      - "--set-env-vars"
-      - "POSTGRES_CONNECTION_STRING=$$POSTGRES_CONNECTION_STRING,SUPABASE_JWT_SECRET=$$SUPABASE_JWT_SECRET,GIN_MODE=$_GIN_MODE,GOOGLE_APPLICATION_CREDENTIALS=$_GOOGLE_APPLICATION_CREDENTIALS,AR_REPO_URL=$_AR_REPO_URL,GCP_PROJECT_ID=$_AR_PROJECT_ID,GCP_REGION=$_DEPLOY_REGION"
+      - -ceu
+      - |
+        gcloud run services update $_SERVICE_NAME \
+          --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA \
+          --region=$_DEPLOY_REGION \
+          --quiet \
+          --set-env-vars \
+          "POSTGRES_CONNECTION_STRING=$$POSTGRES_CONNECTION_STRING,SUPABASE_JWT_SECRET=$$SUPABASE_JWT_SECRET,GIN_MODE=$_GIN_MODE,GOOGLE_APPLICATION_CREDENTIALS=$_GOOGLE_APPLICATION_CREDENTIALS,AR_REPO_URL=$_AR_REPO_URL,GCP_PROJECT_ID=$_AR_PROJECT_ID,GCP_REGION=$_DEPLOY_REGION"
 
 serviceAccount: projects/local-first-476300/serviceAccounts/cloud-build-sa@local-first-476300.iam.gserviceaccount.com
 
