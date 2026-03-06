@@ -1,22 +1,21 @@
 package api
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"slices"
 
+	iampb "cloud.google.com/go/iam/apiv1/iampb"
+	run "cloud.google.com/go/run/apiv2"
+	runpb "cloud.google.com/go/run/apiv2/runpb"
 	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
 	"github.com/gin-gonic/gin"
-	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/cloudrunv2"
-	"github.com/pulumi/pulumi/sdk/v3/go/auto"
-	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
-	"github.com/pulumi/pulumi/sdk/v3/go/auto/optup"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 type RequestBody struct {
@@ -25,6 +24,154 @@ type RequestBody struct {
 	MinInstances   int    `json:"min_instances,omitempty"`
 	MaxInstances   int    `json:"max_instances,omitempty"`
 	Port           int    `json:"port,omitempty"`
+}
+
+func applyRequestDefaults(req *RequestBody) {
+	if req.MaxInstances <= 0 {
+		req.MaxInstances = 1
+	}
+	if req.Port == 0 {
+		req.Port = 8080
+	}
+}
+
+var serviceUpdateMask = &fieldmaskpb.FieldMask{Paths: []string{
+	"scaling.min_instance_count",
+	"scaling.max_instance_count",
+	"template.scaling.min_instance_count",
+	"template.scaling.max_instance_count",
+	"template.containers",
+}}
+
+func buildServiceSpec(req RequestBody, fullName string) *runpb.Service {
+	maxInstances := req.MaxInstances
+	if maxInstances <= 0 {
+		maxInstances = 1
+	}
+
+	serviceSpec := &runpb.Service{
+		Scaling: &runpb.ServiceScaling{
+			MinInstanceCount: int32(req.MinInstances),
+			MaxInstanceCount: int32(maxInstances),
+		},
+		Template: &runpb.RevisionTemplate{
+			Scaling: &runpb.RevisionScaling{
+				MinInstanceCount: int32(req.MinInstances),
+				MaxInstanceCount: int32(maxInstances),
+			},
+			Containers: []*runpb.Container{
+				{
+					Image: req.ContainerImage,
+					Ports: []*runpb.ContainerPort{
+						{ContainerPort: int32(req.Port)},
+					},
+				},
+			},
+		},
+	}
+
+	if fullName != "" {
+		serviceSpec.Name = fullName
+	}
+
+	return serviceSpec
+}
+
+func updateCloudRunService(ctx context.Context, servicesClient *run.ServicesClient, serviceFullName string, req RequestBody) (*runpb.Service, error) {
+	updateOp, err := servicesClient.UpdateService(ctx, &runpb.UpdateServiceRequest{
+		Service:    buildServiceSpec(req, serviceFullName),
+		UpdateMask: serviceUpdateMask,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return updateOp.Wait(ctx)
+}
+
+func createCloudRunService(ctx context.Context, servicesClient *run.ServicesClient, parent, serviceID string, req RequestBody) (*runpb.Service, error) {
+	createOp, err := servicesClient.CreateService(ctx, &runpb.CreateServiceRequest{
+		Parent:    parent,
+		Service:   buildServiceSpec(req, ""),
+		ServiceId: serviceID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return createOp.Wait(ctx)
+}
+
+func upsertCloudRunService(ctx context.Context, servicesClient *run.ServicesClient, parent, serviceFullName, serviceID string, req RequestBody, preferUpdate bool) (*runpb.Service, error) {
+	if preferUpdate {
+		service, err := updateCloudRunService(ctx, servicesClient, serviceFullName, req)
+		if status.Code(err) != codes.NotFound {
+			return service, err
+		}
+
+		return createCloudRunService(ctx, servicesClient, parent, serviceID, req)
+	}
+
+	service, err := createCloudRunService(ctx, servicesClient, parent, serviceID, req)
+	if status.Code(err) != codes.AlreadyExists {
+		return service, err
+	}
+
+	return updateCloudRunService(ctx, servicesClient, serviceFullName, req)
+}
+
+func deleteCloudRunServiceIfExists(ctx context.Context, servicesClient *run.ServicesClient, serviceFullName string) error {
+	deleteOp, err := servicesClient.DeleteService(ctx, &runpb.DeleteServiceRequest{Name: serviceFullName})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil
+		}
+		return err
+	}
+
+	_, err = deleteOp.Wait(ctx)
+	if err != nil && status.Code(err) != codes.NotFound {
+		return err
+	}
+
+	return nil
+}
+
+func ensurePublicInvokerAccess(ctx context.Context, servicesClient *run.ServicesClient, serviceFullName string) error {
+	policy, err := servicesClient.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{Resource: serviceFullName})
+	if err != nil {
+		return err
+	}
+
+	for _, binding := range policy.Bindings {
+		if binding.Role != "roles/run.invoker" {
+			continue
+		}
+
+		if slices.Contains(binding.Members, "allUsers") {
+			return nil
+		}
+
+		binding.Members = append(binding.Members, "allUsers")
+		_, err = servicesClient.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: serviceFullName, Policy: policy})
+		return err
+	}
+
+	policy.Bindings = append(policy.Bindings, &iampb.Binding{
+		Role:    "roles/run.invoker",
+		Members: []string{"allUsers"},
+	})
+
+	_, err = servicesClient.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: serviceFullName, Policy: policy})
+	return err
+}
+
+func getServiceMaxInstances(service *runpb.Service) int32 {
+	if service == nil || service.Template == nil || service.Template.Scaling == nil {
+		return 0
+	}
+
+	return service.Template.Scaling.MaxInstanceCount
 }
 
 // @Summary Create a new deployment
@@ -38,7 +185,7 @@ type RequestBody struct {
 // @Failure 400 {object} map[string]string "Invalid request payload"
 // @Failure 401 {object} map[string]string "Unauthorized"
 // @Failure 500 {object} map[string]string "Deployment failed"
-// @Router /deployments [post]
+// @Router /deployments [put]
 func (app *App) createDeployment(c *gin.Context) {
 	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
 
@@ -53,16 +200,7 @@ func (app *App) createDeployment(c *gin.Context) {
 
 	slog.Info("Received request to create deployment", "deployment", req.Name, "user", userClaims.Email)
 
-	// Set default values if not provided
-	if req.MinInstances == 0 {
-		req.MinInstances = 0
-	}
-	if req.MaxInstances == 0 {
-		req.MaxInstances = 1
-	}
-	if req.Port == 0 {
-		req.Port = 8080
-	}
+	applyRequestDefaults(&req)
 
 	// Check for existing deployment with the same name
 	updateNeeded := false
@@ -88,208 +226,106 @@ func (app *App) createDeployment(c *gin.Context) {
 		}
 	}
 
-	createCloudRunService := func(ctx *pulumi.Context) error {
-		service, err := cloudrunv2.NewService(ctx, req.Name, &cloudrunv2.ServiceArgs{
-			Location:           pulumi.String("us-central1"),
-			Name:               pulumi.String(req.Name),
-			DeletionProtection: pulumi.Bool(false),
-			Scaling: &cloudrunv2.ServiceScalingArgs{
-				MinInstanceCount: pulumi.Int(req.MinInstances),
-				MaxInstanceCount: pulumi.Int(req.MaxInstances),
-			},
-			Template: &cloudrunv2.ServiceTemplateArgs{
-				Scaling: &cloudrunv2.ServiceTemplateScalingArgs{
-					MinInstanceCount: pulumi.Int(req.MinInstances),
-					MaxInstanceCount: pulumi.Int(req.MaxInstances),
-				},
-				Containers: cloudrunv2.ServiceTemplateContainerArray{
-					&cloudrunv2.ServiceTemplateContainerArgs{
-						Image: pulumi.String(req.ContainerImage),
-						Ports: &cloudrunv2.ServiceTemplateContainerPortsArgs{
-							ContainerPort: pulumi.Int(req.Port),
-						},
-					},
-				},
-			},
-		})
-		if err != nil {
-			return err
-		}
-
-		// Allow public access using Cloud Run service IAM policy
-		_, err = cloudrunv2.NewServiceIamBinding(ctx, "public-access", &cloudrunv2.ServiceIamBindingArgs{
-			Project:  pulumi.String(os.Getenv("GCP_PROJECT_ID")),
-			Location: pulumi.String(os.Getenv("GCP_REGION")),
-			Name:     service.Name,
-			Role:     pulumi.String("roles/run.invoker"),
-			Members: pulumi.StringArray{
-				pulumi.String("allUsers"),
-			},
-		})
-		if err != nil {
-			return err
-		}
-
-		// Export the service URL as a stack output
-		ctx.Export("serviceUrl", service.Uri)
-
-		return nil
-	}
-
 	ctx := context.Background()
-
-	// Create cancellable context from the HTTP request context
-	// This allows us to cancel Pulumi operations if the client disconnects
 	reqCtx := c.Request.Context()
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
-	// Monitor for client disconnection
-	go func() {
-		<-reqCtx.Done()
-		slog.Info("Client disconnected, cancelling deployment", "deployment", req.Name)
-		cancel()
-	}()
-
-	// Create unique stack name using hash of email to ensure each deployment creates a new service
-	hash := sha256.Sum256([]byte(userClaims.Email))
-	userHash := hex.EncodeToString(hash[:])[:8] // Use first 8 characters of hash
-
-	stackName := fmt.Sprintf("stack-%s-%s", req.Name, userHash)
-	projectName := fmt.Sprintf("project-%s", req.Name)
-
-	s, err := auto.UpsertStackInlineSource(ctx, stackName, projectName, createCloudRunService)
-	if err != nil {
-		slog.Error("Failed to create or select stack", "error", err.Error())
+	projectID := os.Getenv("GCP_PROJECT_ID")
+	if projectID == "" {
+		slog.Error("Missing GCP project configuration")
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to create or select stack: %v", err),
+			"error": "Server misconfiguration: GCP_PROJECT_ID is required",
 		})
 		return
 	}
 
-	w := s.Workspace()
-	err = w.InstallPlugin(ctx, "gcp", "v9.3.0")
+	region := os.Getenv("GCP_REGION")
+	if region == "" {
+		region = "us-central1"
+	}
+
+	parent := fmt.Sprintf("projects/%s/locations/%s", projectID, region)
+	serviceFullName := fmt.Sprintf("%s/services/%s", parent, req.Name)
+
+	servicesClient, err := run.NewServicesClient(ctx)
 	if err != nil {
-		slog.Error("Failed to install GCP plugin", "error", err.Error())
+		slog.Error("Failed to create Cloud Run client", "error", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to install GCP plugin: %v", err),
+			"error": fmt.Sprintf("Failed to create Cloud Run client: %v", err),
 		})
 		return
 	}
+	defer servicesClient.Close()
 
-	s.SetConfig(ctx, "gcp:project", auto.ConfigValue{Value: os.Getenv("GCP_PROJECT_ID")})
+	service, err := upsertCloudRunService(reqCtx, servicesClient, parent, serviceFullName, req.Name, req, updateNeeded)
 
-	_, err = s.Refresh(ctx)
-	if err != nil {
-		slog.Error("Failed to refresh stack", "error", err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to refresh stack: %v", err),
-		})
-		return
-	}
-
-	// Capture Pulumi output to buffer
-	var outputBuffer bytes.Buffer
-	stdoutStreamer := optup.ProgressStreams(&outputBuffer)
-
-	output, err := s.Up(ctx, stdoutStreamer)
 	if err != nil {
 		// Check if cancellation was the cause
-		if ctx.Err() != nil {
+		if reqCtx.Err() != nil {
 			slog.Info("Deployment cancelled, initiating cleanup", "deployment", req.Name)
 
 			// Use fresh context for cleanup operations
 			cleanupCtx := context.Background()
 
-			// Attempt to destroy partially created resources
-			var destroyBuffer bytes.Buffer
-			destroyStreamer := optdestroy.ProgressStreams(&destroyBuffer)
-			if _, destroyErr := s.Destroy(cleanupCtx, destroyStreamer); destroyErr != nil {
-				slog.Error("Failed to cleanup after cancellation", "error", destroyErr.Error())
-				// Don't attempt to remove stack if destroy failed due to locks
+			// Attempt to delete partially created service
+			if cleanupErr := deleteCloudRunServiceIfExists(cleanupCtx, servicesClient, serviceFullName); cleanupErr != nil {
+				slog.Error("Failed to cleanup after cancellation", "error", cleanupErr.Error())
 				c.AbortWithStatusJSON(http.StatusRequestTimeout, gin.H{
 					"error": "Deployment cancelled by client. Some resources may need manual cleanup.",
 				})
 				return
-			} else {
-				slog.Info("Successfully cleaned up resources after cancellation", "deployment", req.Name)
 			}
 
-			// Remove the stack to clean up all state (only if destroy succeeded)
-			if removeErr := w.RemoveStack(cleanupCtx, stackName); removeErr != nil {
-				slog.Warn("Failed to remove stack after cancellation", "stack", stackName, "error", removeErr.Error())
-			} else {
-				slog.Info("Successfully removed stack state after cancellation", "stack", stackName)
-			}
-
-			// Clean up Pulumi state files from Cloud Storage
-			if cleanupErr := cleanupPulumiStateFiles(cleanupCtx, req.Name); cleanupErr != nil {
-				slog.Warn("Failed to cleanup Pulumi state files after cancellation", "error", cleanupErr.Error())
-				// Continue even if cleanup fails
-			}
+			slog.Info("Successfully cleaned up resources after cancellation", "deployment", req.Name)
 
 			c.AbortWithStatusJSON(http.StatusRequestTimeout, gin.H{
 				"error": "Deployment cancelled by client",
 			})
 			return
 		}
-		slog.Error("Failed to update stack", "error", err.Error())
+		slog.Error("Failed to deploy Cloud Run service", "error", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to update stack: %v", err),
-		})
-		return
-	}
-
-	// Output all Pulumi logs at once
-	if outputBuffer.Len() > 0 {
-		fmt.Print(outputBuffer.String())
-	}
-
-	// Check for errors in the deployment output
-	if output.Summary.ResourceChanges == nil || len(*output.Summary.ResourceChanges) == 0 {
-		slog.Error("Deployment completed but no resources were changed", "resourceChanges", output.Summary.ResourceChanges)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": "Deployment completed but no resources were changed",
-		})
-		return
-	}
-
-	// Check deployment result
-	resourceChanges := *output.Summary.ResourceChanges
-	totalChanges := 0
-	for _, count := range resourceChanges {
-		totalChanges += count
-	}
-
-	if totalChanges == 0 {
-		slog.Error("Deployment completed but no resources were processed", "totalChanges", totalChanges)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": "Deployment completed but no resources were processed",
-		})
-		return
-	}
-
-	// Get the service URL from stack outputs
-	outputs, err := s.Outputs(ctx)
-	if err != nil {
-		slog.Error("Deployment succeeded but failed to get service URL", "error", err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": "Deployment succeeded but failed to get service URL. Check your 0p5.dev dashboard to retrieve the service URL.",
+			"error": fmt.Sprintf("Failed to deploy Cloud Run service: %v", err),
 		})
 		return
 	}
 
 	var serviceUrl string
-	if urlOutput, exists := outputs["serviceUrl"]; exists {
-		serviceUrl = urlOutput.Value.(string)
-		slog.Info("Deployment successful", "serviceUrl", serviceUrl)
+	if service != nil && service.Uri != "" {
+		serviceUrl = service.Uri
 	} else {
-		slog.Warn("serviceUrl not found in stack outputs", "outputs", outputs)
+		slog.Warn("serviceUrl not found in Cloud Run response", "deployment", req.Name)
 		serviceUrl = "URL not available"
 	}
 
-	// Log the resource changes for debugging
-	slog.Info("Deployment completed successfully", "resourceChanges", resourceChanges)
+	expectedMaxInstances := int32(req.MaxInstances)
+	if getServiceMaxInstances(service) != expectedMaxInstances {
+		slog.Info("Enforcing Cloud Run max instances", "deployment", req.Name, "expected", expectedMaxInstances, "actual", getServiceMaxInstances(service))
+		enforcedService, enforceErr := updateCloudRunService(ctx, servicesClient, serviceFullName, req)
+		if enforceErr != nil {
+			slog.Error("Failed to enforce max instances", "error", enforceErr.Error())
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Deployment succeeded but failed to enforce max instances: %v", enforceErr),
+			})
+			return
+		}
+		service = enforcedService
+		if getServiceMaxInstances(service) != expectedMaxInstances {
+			slog.Error("Max instances mismatch after enforcement", "deployment", req.Name, "expected", expectedMaxInstances, "actual", getServiceMaxInstances(service))
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+				"error": "Deployment succeeded but max instances did not apply as expected",
+			})
+			return
+		}
+	}
+
+	// Ensure public access using Cloud Run service IAM policy
+	if err := ensurePublicInvokerAccess(ctx, servicesClient, serviceFullName); err != nil {
+		slog.Error("Failed to set IAM policy", "error", err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("Deployment succeeded but failed to configure public access: %v", err),
+		})
+		return
+	}
 
 	// Record deployment in database
 	if updateNeeded {

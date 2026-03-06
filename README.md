@@ -18,7 +18,7 @@ A REST API for managing Cloud Run deployments and container images with integrat
 - **Framework**: Gin (HTTP web framework)
 - **Database**: PostgreSQL with pgx driver
 - **Cloud**: Google Cloud Platform (Cloud Run, Artifact Registry, Secret Manager, Monitoring)
-- **IaC**: Pulumi for infrastructure deployment
+- **IaC**: GCP Go Client SDK for infrastructure deployment
 - **Container**: Docker with Docker Compose
 - **Dev Tools**: Air (hot reload), Just (command runner), Swag (OpenAPI docs)
 
@@ -49,7 +49,7 @@ go install github.com/swaggo/swag/cmd/swag@latest
 
 ## Quick Start
 
-### 1. Clone and Setup  
+### 1. Clone and Setup
 
 ```bash
 git clone https://github.com/0p5dev/controller.git
@@ -195,14 +195,17 @@ All deployment endpoints require Bearer token authentication.
 The application automatically creates the following tables on startup:
 
 ### `users`
+
 - `username` (TEXT, PRIMARY KEY)
 - `password_hash` (TEXT)
 
 ### `container_images`
+
 - `fqin` (TEXT, PRIMARY KEY) - Fully Qualified Image Name
 - `username` (TEXT)
 
 ### `deployments`
+
 - `id` (UUID, PRIMARY KEY)
 - `name` (TEXT)
 - `url` (TEXT)

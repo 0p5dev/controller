@@ -9,8 +9,6 @@ services:
       context: .
       dockerfile: Dockerfile
       target: development
-      args:
-        PULUMI_STATE_BUCKET: ${PULUMI_STATE_BUCKET}
     container_name: controller
     volumes:
       - ./:/app

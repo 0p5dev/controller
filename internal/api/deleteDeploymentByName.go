@@ -1,20 +1,18 @@
 package api
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 
+	run "cloud.google.com/go/run/apiv2"
+	runpb "cloud.google.com/go/run/apiv2/runpb"
 	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
 	"github.com/gin-gonic/gin"
-	"github.com/pulumi/pulumi/sdk/v3/go/auto"
-	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // @Summary Delete a deployment
@@ -57,73 +55,50 @@ func (app *App) deleteDeploymentByName(c *gin.Context) {
 		return
 	}
 
-	// Create unique stack name using hash of email (same as in createDeployment)
-	hash := sha256.Sum256([]byte(userClaims.Email))
-	userHash := hex.EncodeToString(hash[:])[:8]
-
-	stackName := fmt.Sprintf("stack-%s-%s", deploymentName, userHash)
-	projectName := fmt.Sprintf("project-%s", deploymentName)
-
-	// Get the existing stack
-	s, err := auto.SelectStackInlineSource(ctx, stackName, projectName, func(ctx *pulumi.Context) error {
-		// Empty program since we're just destroying
-		return nil
-	})
-	if err != nil {
-		slog.Error("Failed to select stack", "stack", stackName, "error", err)
+	projectID := os.Getenv("GCP_PROJECT_ID")
+	if projectID == "" {
+		slog.Error("Missing GCP project configuration")
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to select stack: %v", err),
+			"error": "Server misconfiguration: GCP_PROJECT_ID is required",
 		})
 		return
 	}
 
-	// Install GCP plugin
-	w := s.Workspace()
-	err = w.InstallPlugin(ctx, "gcp", "v9.3.0")
+	region := os.Getenv("GCP_REGION")
+	if region == "" {
+		region = "us-central1"
+	}
+
+	serviceFullName := fmt.Sprintf("projects/%s/locations/%s/services/%s", projectID, region, deploymentName)
+
+	servicesClient, err := run.NewServicesClient(ctx)
 	if err != nil {
-		slog.Error("Failed to install GCP plugin", "error", err)
+		slog.Error("Failed to create Cloud Run client", "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to install GCP plugin: %v", err),
+			"error": fmt.Sprintf("Failed to create Cloud Run client: %v", err),
 		})
 		return
 	}
+	defer servicesClient.Close()
 
-	// Set GCP project configuration
-	s.SetConfig(ctx, "gcp:project", auto.ConfigValue{Value: os.Getenv("GCP_PROJECT_ID")})
-
-	// Refresh stack state
-	_, err = s.Refresh(ctx)
+	deleteOp, err := servicesClient.DeleteService(ctx, &runpb.DeleteServiceRequest{Name: serviceFullName})
 	if err != nil {
-		slog.Warn("Failed to refresh stack", "stack", stackName, "error", err)
-		// Continue with destroy even if refresh fails
-	}
-
-	// Destroy the stack (removes all Cloud Run resources)
-	// Capture Pulumi output to buffer
-	var outputBuffer bytes.Buffer
-	stdoutStreamer := optdestroy.ProgressStreams(&outputBuffer)
-	_, err = s.Destroy(ctx, stdoutStreamer)
-	if err != nil {
-		slog.Error("Failed to destroy stack", "stack", stackName, "error", err)
+		slog.Error("Failed to delete Cloud Run service", "service", serviceFullName, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to destroy Cloud Run resources: %v", err),
 		})
 		return
 	}
 
-	// Output all Pulumi logs at once
-	if outputBuffer.Len() > 0 {
-		fmt.Print(outputBuffer.String())
+	if _, err := deleteOp.Wait(ctx); err != nil && status.Code(err) != codes.NotFound {
+		slog.Error("Failed waiting for Cloud Run deletion", "service", serviceFullName, "error", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("Failed to destroy Cloud Run resources: %v", err),
+		})
+		return
 	}
 
-	slog.Info("Successfully destroyed stack", "stack", stackName)
-
-	// Remove the stack
-	err = w.RemoveStack(ctx, stackName)
-	if err != nil {
-		slog.Warn("Failed to remove stack", "stack", stackName, "error", err)
-		// Continue even if stack removal fails
-	}
+	slog.Info("Successfully destroyed Cloud Run service", "service", serviceFullName)
 
 	// Delete the deployment from the database
 	_, err = app.Pool.Exec(ctx, "DELETE FROM deployments WHERE id = $1", deploymentId)
@@ -133,12 +108,6 @@ func (app *App) deleteDeploymentByName(c *gin.Context) {
 			"error": fmt.Sprintf("Cloud Run resources destroyed but failed to delete database record: %v", err),
 		})
 		return
-	}
-
-	// Clean up Pulumi state files from Cloud Storage
-	if cleanupErr := cleanupPulumiStateFiles(ctx, deploymentName); cleanupErr != nil {
-		slog.Warn("Failed to cleanup Pulumi state files", "error", cleanupErr.Error())
-		// Continue even if cleanup fails
 	}
 
 	slog.Info("Successfully deleted deployment", "deployment", deploymentName, "user", userClaims.Email)
