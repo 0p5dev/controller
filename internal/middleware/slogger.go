@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -31,6 +32,7 @@ func SloggerMiddleware() gin.HandlerFunc {
 			slog.Duration("duration", duration),
 		)
 
-		logger.Log(c.Request.Context(), slog.LevelInfo, "request complete")
+		msg := fmt.Sprintf("[%s](%d)%s from %s in %v", c.Request.Method, statusCode, c.Request.URL.Path, c.ClientIP(), duration)
+		logger.Log(c.Request.Context(), slog.LevelInfo, msg)
 	}
 }
