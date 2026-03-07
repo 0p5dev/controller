@@ -32,13 +32,10 @@ func Initialize(router *gin.Engine) (*pgxpool.Pool, error) {
 	}
 	router.Use(cors.New(corsConfig))
 
-	trustedProxies := []string{"0.0.0.0/0"}
-	if err := router.SetTrustedProxies(trustedProxies); err != nil {
-		return nil, fmt.Errorf("failed to set trusted proxies: %w", err)
-	}
+	router.SetTrustedProxies(nil)
 
 	router.Use(gin.Recovery())
-	if os.Getenv("APP_ENV") == "production" {
+	if os.Getenv("GIN_MODE") == "release" {
 		router.Use(middleware.SloggerMiddleware())
 	} else {
 		router.Use(gin.Logger())

@@ -6,13 +6,16 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/vlad-tokarev/sloggcp"
 )
 
 func SloggerMiddleware() gin.HandlerFunc {
-	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+	gcpJsonHandler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level:       slog.LevelInfo,
+		ReplaceAttr: sloggcp.ReplaceAttr,
+		AddSource:   true,
 	})
-	slog.SetDefault(slog.New(jsonHandler))
+	slog.SetDefault(slog.New(gcpJsonHandler))
 
 	return func(c *gin.Context) {
 		start := time.Now()
