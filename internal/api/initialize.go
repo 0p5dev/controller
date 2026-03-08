@@ -26,7 +26,7 @@ func Initialize(router *gin.Engine) (*pgxpool.Pool, error) {
 
 	corsConfig := cors.Config{
 		AllowOrigins:  []string{"*"},
-		AllowMethods:  []string{"GET", "POST", "OPTIONS"},
+		AllowMethods:  []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:  []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders: []string{"Content-Length"},
 	}

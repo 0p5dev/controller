@@ -12,6 +12,7 @@ services:
     container_name: controller
     volumes:
       - ./:/app
+      - ~/.config/gcloud/application_default_credentials.json:/app/adc.json:ro
     working_dir: /app
     tty: true
     ports:

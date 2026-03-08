@@ -16,10 +16,9 @@ import (
 	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
 
 	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1/google"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
-
-	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/uuid"
 )
 
@@ -142,22 +141,8 @@ func (app *App) pushToContainerRegistry(c *gin.Context) {
 		return
 	}
 
-	// Authenticate to Artifact Registry using Service Account key
-	key, err := os.ReadFile("./sakey.json")
-	if err != nil {
-		slog.Error("Failed to read Service Account key file", "error", err)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to read Service Account key file: %v", err),
-		})
-		return
-	}
-	auth := authn.FromConfig(authn.AuthConfig{
-		Username: "_json_key",
-		Password: string(key),
-	})
-
-	// Push image to Artifact Registry
-	err = remote.Write(imageRef, img, remote.WithAuth(auth), remote.WithContext(ctx))
+	// Push image to Artifact Registry using ADC for authentication
+	err = remote.Write(imageRef, img, remote.WithAuthFromKeychain(google.Keychain), remote.WithContext(ctx))
 	if err != nil {
 		slog.Error("Image push failed", "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
