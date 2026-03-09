@@ -288,8 +288,12 @@ func (app *App) createDeployment(c *gin.Context) {
 	// Ensure public access using Cloud Run service IAM policy
 	if err := ensurePublicInvokerAccess(ctx, servicesClient, serviceFullName); err != nil {
 		slog.Error("Failed to set IAM policy", "error", err.Error())
+		// Attempt to delete the service since it's not publicly accessible and likely unusable for the user
+		if cleanupErr := deleteCloudRunServiceIfExists(context.Background(), servicesClient, serviceFullName); cleanupErr != nil {
+			slog.Error("Failed to cleanup after IAM policy failure. Cloud Run service may need manual cleanup", "error", cleanupErr.Error())
+		}
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Deployment succeeded but failed to configure public access: %v", err),
+			"error": fmt.Sprintf("Deployment failed, unable to configure public access: %v", err),
 		})
 		return
 	}

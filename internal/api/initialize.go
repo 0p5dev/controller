@@ -40,13 +40,6 @@ func Initialize(router *gin.Engine) (*pgxpool.Pool, error) {
 		return nil, err
 	}
 
-	pool, err := data.InitializeDatabase()
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize database: %w", err)
-	}
-
-	app := &App{Pool: pool}
-
 	corsConfig := cors.Config{
 		AllowOrigins:  []string{"*"},
 		AllowMethods:  []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -63,6 +56,13 @@ func Initialize(router *gin.Engine) (*pgxpool.Pool, error) {
 	} else {
 		router.Use(gin.Logger())
 	}
+
+	pool, err := data.InitializeDatabase()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize database: %w", err)
+	}
+
+	app := &App{Pool: pool}
 
 	app.CreateRoutes(router)
 

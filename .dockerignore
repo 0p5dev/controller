@@ -1,6 +1,10 @@
 oauth-jwt-structure.txt
 .tmp/
 .vscode/
-.env
+.env*
 sakey.json
 adc.json
+cloudbuild.yaml
+justfile
+LICENSE
+README.md
