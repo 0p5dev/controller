@@ -24,7 +24,6 @@ type PaginatedDeploymentsResponse struct {
 // @Summary List deployments
 // @Description Get a paginated list of deployments for the authenticated user
 // @Tags deployments
-// @Accept json
 // @Produce json
 // @Security BearerAuth
 // @Param page query int false "Page number (default: 1)"
@@ -157,8 +156,6 @@ func (app *App) listDeployments(c *gin.Context) {
 		Limit:       limit,
 		TotalPages:  totalPages,
 	}
-
-	slog.Info("Retrieved deployments", "user", userClaims.Email, "count", len(deployments), "page", page, "total_pages", totalPages)
 
 	c.JSON(http.StatusOK, response)
 }

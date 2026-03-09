@@ -18,7 +18,6 @@ import (
 // @Summary Delete a deployment
 // @Description Delete a Cloud Run deployment and remove it from the database
 // @Tags deployments
-// @Accept json
 // @Produce json
 // @Security BearerAuth
 // @Param name path string true "Deployment name"
@@ -40,8 +39,6 @@ func (app *App) deleteDeploymentByName(c *gin.Context) {
 		return
 	}
 
-	slog.Info("Received request to delete deployment", "deployment", deploymentName, "user", userClaims.Email)
-
 	ctx := context.Background()
 
 	// Verify the deployment belongs to the authenticated user
@@ -56,20 +53,9 @@ func (app *App) deleteDeploymentByName(c *gin.Context) {
 	}
 
 	projectID := os.Getenv("GCP_PROJECT_ID")
-	if projectID == "" {
-		slog.Error("Missing GCP project configuration")
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": "Server misconfiguration: GCP_PROJECT_ID is required",
-		})
-		return
-	}
-
 	region := os.Getenv("GCP_REGION")
-	if region == "" {
-		region = "us-central1"
-	}
 
-	serviceFullName := fmt.Sprintf("projects/%s/locations/%s/services/%s", projectID, region, deploymentName)
+	serviceFullName := fmt.Sprintf("projects/%s/locations/%s/services/%s", projectID, region, deploymentId)
 
 	servicesClient, err := run.NewServicesClient(ctx)
 	if err != nil {
@@ -98,8 +84,6 @@ func (app *App) deleteDeploymentByName(c *gin.Context) {
 		return
 	}
 
-	slog.Info("Successfully destroyed Cloud Run service", "service", serviceFullName)
-
 	// Delete the deployment from the database
 	_, err = app.Pool.Exec(ctx, "DELETE FROM deployments WHERE id = $1", deploymentId)
 	if err != nil {
@@ -109,8 +93,6 @@ func (app *App) deleteDeploymentByName(c *gin.Context) {
 		})
 		return
 	}
-
-	slog.Info("Successfully deleted deployment", "deployment", deploymentName, "user", userClaims.Email)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": fmt.Sprintf("Deployment '%s' deleted successfully", deploymentName),

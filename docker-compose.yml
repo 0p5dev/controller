@@ -27,6 +27,17 @@ services:
       - 0p5dev
     env_file:
       - .env
+    environment:
+      # Anything not specified here is a secret, and must be specified in the .env file, or be passed as an ENV var to the container at runtime.
+      POSTGRES_CONNECTION_STRING: ${POSTGRES_CONNECTION_STRING}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      AR_REPO_URL: us-central1-docker.pkg.dev/local-first-476300/container-images-dev
+      GCP_PROJECT_ID: local-first-476300
+      GCP_REGION: us-central1
+      GIN_MODE: debug
+      SERVICE_ACCOUNT_EMAIL: user-service-sa-dev@local-first-476300.iam.gserviceaccount.com
+      # This ENV var must NOT be specified in the production Cloud Run service's environment. That environment will use ADC for authentication, and if this ENV var is set, it will override ADC and cause authentication to fail.
+      GOOGLE_APPLICATION_CREDENTIALS: /app/adc.json
     profiles:
       - dev
       - local

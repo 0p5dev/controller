@@ -16,43 +16,14 @@ const docTemplate = `{
             "email": "support@swagger.io"
         },
         "license": {
-            "name": "Apache 2.0",
-            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+            "name": "MIT",
+            "url": "https://opensource.org/licenses/MIT"
         },
         "version": "{{.Version}}"
     },
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/auth/supabase-credentials": {
-            "get": {
-                "description": "Retrieve Supabase URL and anon public key from GCP Secret Manager",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Get Supabase credentials",
-                "responses": {
-                    "200": {
-                        "description": "Supabase credentials",
-                        "schema": {
-                            "$ref": "#/definitions/api.SupabaseCredentials"
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to retrieve credentials",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/container-images": {
             "post": {
                 "security": [
@@ -60,9 +31,9 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Upload a container image tarball and push it to Google Artifact Registry",
+                "description": "Upload a gzipped docker save tarball and push it to Google Artifact Registry",
                 "consumes": [
-                    "application/x-gzip"
+                    "application/gzip"
                 ],
                 "produces": [
                     "application/json"
@@ -110,6 +81,15 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "415": {
+                        "description": "Unsupported media type",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "500": {
                         "description": "Failed to push image",
                         "schema": {
@@ -130,9 +110,6 @@ const docTemplate = `{
                     }
                 ],
                 "description": "Get a paginated list of deployments for the authenticated user",
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -187,7 +164,7 @@ const docTemplate = `{
                     }
                 }
             },
-            "post": {
+            "put": {
                 "security": [
                     {
                         "BearerAuth": []
@@ -243,6 +220,15 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "408": {
+                        "description": "Deployment cancelled by client",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "500": {
                         "description": "Deployment failed",
                         "schema": {
@@ -262,10 +248,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieve detailed information about a specific deployment including metrics",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Retrieve detailed information about a specific deployment",
                 "produces": [
                     "application/json"
                 ],
@@ -284,7 +267,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Deployment details with metrics",
+                        "description": "Deployment details",
                         "schema": {
                             "$ref": "#/definitions/api.CloudRunServiceDetails"
                         }
@@ -326,6 +309,77 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete a Cloud Run deployment and remove it from the database",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deployments"
+                ],
+                "summary": "Delete a deployment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Deployment name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deployment deleted successfully",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Deployment name is required",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Deployment not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to delete deployment",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
             }
         },
         "/health": {
@@ -349,7 +403,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Service is unhealthy",
+                        "description": "Service or database is unhealthy",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -371,9 +425,6 @@ const docTemplate = `{
                 },
                 "location": {
                     "type": "string"
-                },
-                "metrics": {
-                    "$ref": "#/definitions/api.ServiceMetrics"
                 },
                 "name": {
                     "type": "string"
@@ -429,23 +480,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
-                }
-            }
-        },
-        "api.ServiceMetrics": {
-            "type": "object",
-            "properties": {
-                "cpu_per_hour": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
                 },
-                "requests_per_hour": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
+                "port": {
+                    "type": "integer"
                 }
             }
         },
@@ -457,17 +494,6 @@ const docTemplate = `{
                 },
                 "min_instances": {
                     "type": "integer"
-                }
-            }
-        },
-        "api.SupabaseCredentials": {
-            "type": "object",
-            "properties": {
-                "supabase_anon_public_key": {
-                    "type": "string"
-                },
-                "supabase_url": {
-                    "type": "string"
                 }
             }
         },
@@ -506,7 +532,7 @@ const docTemplate = `{
     },
     "securityDefinitions": {
         "BearerAuth": {
-            "description": "Type \"Bearer\" followed by a space and JWT token.",
+            "description": "Bearer JWT token in the format: Bearer \u003ctoken\u003e",
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"
@@ -520,7 +546,7 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "localhost:8080",
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
-	Title:            "OpsController API",
+	Title:            "0p5dev Controller API",
 	Description:      "A REST API for managing Cloud Run deployments and container images",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,

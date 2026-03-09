@@ -9,7 +9,7 @@ import (
 	"github.com/0p5dev/controller/internal/api"
 )
 
-// @title           OpsController API
+// @title           0p5dev Controller API
 // @version         1.0
 // @description     A REST API for managing Cloud Run deployments and container images
 // @termsOfService  http://swagger.io/terms/
@@ -18,8 +18,8 @@ import (
 // @contact.url    http://www.swagger.io/support
 // @contact.email  support@swagger.io
 
-// @license.name  Apache 2.0
-// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+// @license.name  MIT
+// @license.url   https://opensource.org/licenses/MIT
 
 // @host      localhost:8080
 // @BasePath  /api/v1
@@ -27,7 +27,7 @@ import (
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
-// @description Type "Bearer" followed by a space and JWT token.
+// @description Bearer JWT token in the format: Bearer <token>
 
 func main() {
 	ginMode := os.Getenv("GIN_MODE")

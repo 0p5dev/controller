@@ -46,15 +46,16 @@ func getImageNameFromTarballPath(tarPath string) string {
 }
 
 // @Summary Push container image to registry
-// @Description Upload a container image tarball and push it to Google Artifact Registry
+// @Description Upload a gzipped docker save tarball and push it to Google Artifact Registry
 // @Tags container-images
-// @Accept application/x-gzip
+// @Accept application/gzip
 // @Produce json
 // @Security BearerAuth
 // @Param image body string true "Gzipped container image tarball"
 // @Success 200 {object} map[string]string "Image pushed successfully with FQIN"
 // @Failure 400 {object} map[string]string "Invalid request"
 // @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 415 {object} map[string]string "Unsupported media type"
 // @Failure 500 {object} map[string]string "Failed to push image"
 // @Router /container-images [post]
 func (app *App) pushToContainerRegistry(c *gin.Context) {
@@ -117,7 +118,9 @@ func (app *App) pushToContainerRegistry(c *gin.Context) {
 		return
 	}
 
-	imageName := getImageNameFromTarballPath(tmpTarPath)
+	originalImageName := getImageNameFromTarballPath(tmpTarPath)
+	hashedEmail := hashEmail(userClaims.Email)
+	finalImageName := fmt.Sprintf("%s-%s", originalImageName, hashedEmail)
 
 	// Tag image for target registry
 	arRepoUrl := os.Getenv("AR_REPO_URL")
@@ -130,7 +133,7 @@ func (app *App) pushToContainerRegistry(c *gin.Context) {
 	}
 	uuid := uuid.New().String()
 	shortTag := uuid[:8]
-	targetTag := fmt.Sprintf("%s/%s:%s", arRepoUrl, imageName, shortTag)
+	targetTag := fmt.Sprintf("%s/%s:%s", arRepoUrl, finalImageName, shortTag)
 
 	imageRef, err := name.ParseReference(targetTag)
 	if err != nil {
@@ -164,7 +167,6 @@ func (app *App) pushToContainerRegistry(c *gin.Context) {
 		return
 	}
 
-	slog.Info("Successfully pushed image to registry", "target_tag", targetTag)
 	c.JSON(http.StatusOK, gin.H{
 		"fqin": targetTag,
 	})

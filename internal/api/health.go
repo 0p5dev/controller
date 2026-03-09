@@ -12,7 +12,7 @@ import (
 // @Tags health
 // @Produce json
 // @Success 200 {object} map[string]string "Service is healthy"
-// @Failure 500 {object} map[string]interface{} "Service is unhealthy"
+// @Failure 500 {object} map[string]interface{} "Service or database is unhealthy"
 // @Router /health [get]
 func (app *App) CheckHealth(c *gin.Context) {
 	// slog.Info("Log level Info test", "key", "value")

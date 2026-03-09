@@ -27,8 +27,20 @@ type RequestBody struct {
 }
 
 func applyRequestDefaults(req *RequestBody) {
+	if req.MinInstances < 0 {
+		req.MinInstances = 0
+	}
+	if req.MinInstances > 10 {
+		req.MinInstances = 10
+	}
 	if req.MaxInstances <= 0 {
 		req.MaxInstances = 1
+	}
+	if req.MaxInstances > 10 {
+		req.MaxInstances = 10
+	}
+	if req.MaxInstances < req.MinInstances {
+		req.MaxInstances = req.MinInstances
 	}
 	if req.Port == 0 {
 		req.Port = 8080
@@ -43,21 +55,23 @@ var serviceUpdateMask = &fieldmaskpb.FieldMask{Paths: []string{
 	"template.containers",
 }}
 
-func buildServiceSpec(req RequestBody, fullName string) *runpb.Service {
-	maxInstances := req.MaxInstances
-	if maxInstances <= 0 {
-		maxInstances = 1
+func buildServiceSpec(req RequestBody, fullName string, userEmail string) *runpb.Service {
+	labels := map[string]string{
+		"created_by": "0p5dev_controller",
+		"user":       userEmail,
 	}
 
 	serviceSpec := &runpb.Service{
+		Labels: labels,
 		Scaling: &runpb.ServiceScaling{
 			MinInstanceCount: int32(req.MinInstances),
-			MaxInstanceCount: int32(maxInstances),
+			MaxInstanceCount: int32(req.MaxInstances),
 		},
 		Template: &runpb.RevisionTemplate{
+			ServiceAccount: os.Getenv("SERVICE_ACCOUNT_EMAIL"),
 			Scaling: &runpb.RevisionScaling{
 				MinInstanceCount: int32(req.MinInstances),
-				MaxInstanceCount: int32(maxInstances),
+				MaxInstanceCount: int32(req.MaxInstances),
 			},
 			Containers: []*runpb.Container{
 				{
@@ -77,9 +91,9 @@ func buildServiceSpec(req RequestBody, fullName string) *runpb.Service {
 	return serviceSpec
 }
 
-func updateCloudRunService(ctx context.Context, servicesClient *run.ServicesClient, serviceFullName string, req RequestBody) (*runpb.Service, error) {
+func updateCloudRunService(ctx context.Context, servicesClient *run.ServicesClient, serviceFullName string, req RequestBody, userEmail string) (*runpb.Service, error) {
 	updateOp, err := servicesClient.UpdateService(ctx, &runpb.UpdateServiceRequest{
-		Service:    buildServiceSpec(req, serviceFullName),
+		Service:    buildServiceSpec(req, serviceFullName, userEmail),
 		UpdateMask: serviceUpdateMask,
 	})
 	if err != nil {
@@ -89,10 +103,10 @@ func updateCloudRunService(ctx context.Context, servicesClient *run.ServicesClie
 	return updateOp.Wait(ctx)
 }
 
-func createCloudRunService(ctx context.Context, servicesClient *run.ServicesClient, parent, serviceID string, req RequestBody) (*runpb.Service, error) {
+func createCloudRunService(ctx context.Context, servicesClient *run.ServicesClient, parent, serviceID string, req RequestBody, userEmail string) (*runpb.Service, error) {
 	createOp, err := servicesClient.CreateService(ctx, &runpb.CreateServiceRequest{
 		Parent:    parent,
-		Service:   buildServiceSpec(req, ""),
+		Service:   buildServiceSpec(req, "", userEmail),
 		ServiceId: serviceID,
 	})
 	if err != nil {
@@ -102,22 +116,21 @@ func createCloudRunService(ctx context.Context, servicesClient *run.ServicesClie
 	return createOp.Wait(ctx)
 }
 
-func upsertCloudRunService(ctx context.Context, servicesClient *run.ServicesClient, parent, serviceFullName, serviceID string, req RequestBody, preferUpdate bool) (*runpb.Service, error) {
+func upsertCloudRunService(ctx context.Context, servicesClient *run.ServicesClient, parent, serviceFullName, serviceID string, req RequestBody, userEmail string, preferUpdate bool) (*runpb.Service, error) {
 	if preferUpdate {
-		service, err := updateCloudRunService(ctx, servicesClient, serviceFullName, req)
+		service, err := updateCloudRunService(ctx, servicesClient, serviceFullName, req, userEmail)
 		if status.Code(err) != codes.NotFound {
 			return service, err
 		}
 
-		return createCloudRunService(ctx, servicesClient, parent, serviceID, req)
+		return createCloudRunService(ctx, servicesClient, parent, serviceID, req, userEmail)
+	} else {
+		service, err := createCloudRunService(ctx, servicesClient, parent, serviceID, req, userEmail)
+		if status.Code(err) != codes.AlreadyExists {
+			return service, err
+		}
+		return updateCloudRunService(ctx, servicesClient, serviceFullName, req, userEmail)
 	}
-
-	service, err := createCloudRunService(ctx, servicesClient, parent, serviceID, req)
-	if status.Code(err) != codes.AlreadyExists {
-		return service, err
-	}
-
-	return updateCloudRunService(ctx, servicesClient, serviceFullName, req)
 }
 
 func deleteCloudRunServiceIfExists(ctx context.Context, servicesClient *run.ServicesClient, serviceFullName string) error {
@@ -166,14 +179,6 @@ func ensurePublicInvokerAccess(ctx context.Context, servicesClient *run.Services
 	return err
 }
 
-func getServiceMaxInstances(service *runpb.Service) int32 {
-	if service == nil || service.Template == nil || service.Template.Scaling == nil {
-		return 0
-	}
-
-	return service.Template.Scaling.MaxInstanceCount
-}
-
 // @Summary Create a new deployment
 // @Description Deploy a container image to Cloud Run
 // @Tags deployments
@@ -184,6 +189,7 @@ func getServiceMaxInstances(service *runpb.Service) int32 {
 // @Success 200 {object} map[string]string "Deployment successful with service URL"
 // @Failure 400 {object} map[string]string "Invalid request payload"
 // @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 408 {object} map[string]string "Deployment cancelled by client"
 // @Failure 500 {object} map[string]string "Deployment failed"
 // @Router /deployments [put]
 func (app *App) createDeployment(c *gin.Context) {
@@ -198,14 +204,15 @@ func (app *App) createDeployment(c *gin.Context) {
 		return
 	}
 
-	slog.Info("Received request to create deployment", "deployment", req.Name, "user", userClaims.Email)
-
 	applyRequestDefaults(&req)
 
 	// Check for existing deployment with the same name
+	hashedEmail := hashEmail(userClaims.Email)
+	serviceId := fmt.Sprintf("%s-%s", req.Name, hashedEmail)
 	updateNeeded := false
-	var existingDeploymentId string
-	rows, err := app.Pool.Query(c.Request.Context(), `SELECT id FROM deployments WHERE name=$1 AND user_email=$2`, req.Name, userClaims.Email)
+
+	var existingDeployment bool
+	err := app.Pool.QueryRow(c.Request.Context(), `SELECT EXISTS(SELECT 1 FROM deployments WHERE id=$1)`, serviceId).Scan(&existingDeployment)
 	if err != nil {
 		slog.Error("Failed to check existing deployments", "error", err.Error())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -213,38 +220,19 @@ func (app *App) createDeployment(c *gin.Context) {
 		})
 		return
 	}
-	defer rows.Close()
 
-	if rows.Next() {
+	if existingDeployment {
 		updateNeeded = true
-		if err := rows.Scan(&existingDeploymentId); err != nil {
-			slog.Error("Failed to scan deployment ID", "error", err.Error())
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to scan deployment ID: %v", err),
-			})
-			return
-		}
 	}
 
 	ctx := context.Background()
 	reqCtx := c.Request.Context()
 
 	projectID := os.Getenv("GCP_PROJECT_ID")
-	if projectID == "" {
-		slog.Error("Missing GCP project configuration")
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": "Server misconfiguration: GCP_PROJECT_ID is required",
-		})
-		return
-	}
-
 	region := os.Getenv("GCP_REGION")
-	if region == "" {
-		region = "us-central1"
-	}
 
 	parent := fmt.Sprintf("projects/%s/locations/%s", projectID, region)
-	serviceFullName := fmt.Sprintf("%s/services/%s", parent, req.Name)
+	serviceFullName := fmt.Sprintf("%s/services/%s", parent, serviceId)
 
 	servicesClient, err := run.NewServicesClient(ctx)
 	if err != nil {
@@ -256,12 +244,12 @@ func (app *App) createDeployment(c *gin.Context) {
 	}
 	defer servicesClient.Close()
 
-	service, err := upsertCloudRunService(reqCtx, servicesClient, parent, serviceFullName, req.Name, req, updateNeeded)
+	service, err := upsertCloudRunService(reqCtx, servicesClient, parent, serviceFullName, serviceId, req, hashedEmail, updateNeeded)
 
 	if err != nil {
 		// Check if cancellation was the cause
 		if reqCtx.Err() != nil {
-			slog.Info("Deployment cancelled, initiating cleanup", "deployment", req.Name)
+			slog.Warn("Deployment cancelled, initiating cleanup", "deployment", req.Name)
 
 			// Use fresh context for cleanup operations
 			cleanupCtx := context.Background()
@@ -297,27 +285,6 @@ func (app *App) createDeployment(c *gin.Context) {
 		serviceUrl = "URL not available"
 	}
 
-	expectedMaxInstances := int32(req.MaxInstances)
-	if getServiceMaxInstances(service) != expectedMaxInstances {
-		slog.Info("Enforcing Cloud Run max instances", "deployment", req.Name, "expected", expectedMaxInstances, "actual", getServiceMaxInstances(service))
-		enforcedService, enforceErr := updateCloudRunService(ctx, servicesClient, serviceFullName, req)
-		if enforceErr != nil {
-			slog.Error("Failed to enforce max instances", "error", enforceErr.Error())
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Deployment succeeded but failed to enforce max instances: %v", enforceErr),
-			})
-			return
-		}
-		service = enforcedService
-		if getServiceMaxInstances(service) != expectedMaxInstances {
-			slog.Error("Max instances mismatch after enforcement", "deployment", req.Name, "expected", expectedMaxInstances, "actual", getServiceMaxInstances(service))
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"error": "Deployment succeeded but max instances did not apply as expected",
-			})
-			return
-		}
-	}
-
 	// Ensure public access using Cloud Run service IAM policy
 	if err := ensurePublicInvokerAccess(ctx, servicesClient, serviceFullName); err != nil {
 		slog.Error("Failed to set IAM policy", "error", err.Error())
@@ -329,7 +296,7 @@ func (app *App) createDeployment(c *gin.Context) {
 
 	// Record deployment in database
 	if updateNeeded {
-		_, err := app.Pool.Exec(ctx, `UPDATE deployments SET container_image=$1, min_instances=$2, max_instances=$3 WHERE id=$4`, req.ContainerImage, req.MinInstances, req.MaxInstances, existingDeploymentId)
+		_, err := app.Pool.Exec(ctx, `UPDATE deployments SET container_image=$1, min_instances=$2, max_instances=$3 WHERE id=$4`, req.ContainerImage, req.MinInstances, req.MaxInstances, serviceId)
 		if err != nil {
 			slog.Error("Failed to update deployment record", "error", err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -338,16 +305,15 @@ func (app *App) createDeployment(c *gin.Context) {
 			return
 		}
 
-		slog.Info("Deployment updated successfully", "name", req.Name, "container_image", req.ContainerImage)
 		c.JSON(http.StatusOK, gin.H{
 			"service_url": serviceUrl,
 		})
 		return
 	} else {
 		_, err = app.Pool.Exec(ctx, `
-				INSERT INTO deployments (name, url, container_image, user_email, min_instances, max_instances)
-				VALUES ($1, $2, $3, $4, $5, $6)
-			`, req.Name, serviceUrl, req.ContainerImage, userClaims.Email, req.MinInstances, req.MaxInstances)
+				INSERT INTO deployments (id, name, url, container_image, user_email, min_instances, max_instances)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)
+			`, serviceId, req.Name, serviceUrl, req.ContainerImage, userClaims.Email, req.MinInstances, req.MaxInstances)
 		if err != nil {
 			slog.Error("Failed to record deployment in database", "error", err.Error())
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{

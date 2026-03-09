@@ -42,13 +42,12 @@ type ServiceMetrics struct {
 }
 
 // @Summary Get deployment by name
-// @Description Retrieve detailed information about a specific deployment including metrics
+// @Description Retrieve detailed information about a specific deployment
 // @Tags deployments
-// @Accept json
 // @Produce json
 // @Security BearerAuth
 // @Param name path string true "Deployment name"
-// @Success 200 {object} api.CloudRunServiceDetails "Deployment details with metrics"
+// @Success 200 {object} api.CloudRunServiceDetails "Deployment details"
 // @Failure 400 {object} map[string]string "Deployment name is required"
 // @Failure 401 {object} map[string]string "Unauthorized"
 // @Failure 404 {object} map[string]string "Deployment not found"
@@ -93,7 +92,7 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 	defer runClient.Close()
 
 	// Get Cloud Run service details
-	serviceName := fmt.Sprintf("projects/%s/locations/%s/services/%s", projectID, location, deploymentName)
+	serviceName := fmt.Sprintf("projects/%s/locations/%s/services/%s", projectID, location, deploymentId)
 
 	req := &runpb.GetServiceRequest{
 		Name: serviceName,
@@ -101,7 +100,7 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 
 	service, err := runClient.GetService(ctx, req)
 	if err != nil {
-		slog.Error("Failed to get service", "deployment", deploymentName, "error", err)
+		slog.Error("Failed to get service", "service", serviceName, "error", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "Cloud Run service not found",
 		})
@@ -170,8 +169,6 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 	} else {
 		details.Status = "Unknown"
 	}
-
-	slog.Info("Retrieved deployment details", "user", userClaims.Email, "deployment", deploymentName)
 
 	c.JSON(http.StatusOK, details)
 }

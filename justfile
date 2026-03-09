@@ -46,4 +46,4 @@ add PACKAGE:
     go get -u {{PACKAGE}}
 
 swagger:
-    swag init --dir ./cmd,./internal/api --parseDependency --parseInternal
+    go run github.com/swaggo/swag/cmd/swag@latest init --dir ./cmd,./internal/api --parseDependency --parseInternal

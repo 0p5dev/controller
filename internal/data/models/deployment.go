@@ -23,7 +23,7 @@ func MigrateDeploymentTable(pool *pgxpool.Pool) error {
 	ctx := context.Background()
 	_, err := pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS deployments (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
 			url TEXT NOT NULL,
 			container_image TEXT NOT NULL REFERENCES container_images(fqin),

@@ -16,7 +16,30 @@ type App struct {
 	Pool *pgxpool.Pool
 }
 
+func ensureEnvVars() error {
+	requiredVars := []string{
+		"POSTGRES_CONNECTION_STRING",
+		"SUPABASE_JWT_SECRET",
+		"GCP_PROJECT_ID",
+		"GCP_REGION",
+		"SERVICE_ACCOUNT_EMAIL",
+		"AR_REPO_URL",
+	}
+
+	for _, v := range requiredVars {
+		if os.Getenv(v) == "" {
+			return fmt.Errorf("environment variable %s is required", v)
+		}
+	}
+
+	return nil
+}
+
 func Initialize(router *gin.Engine) (*pgxpool.Pool, error) {
+	if err := ensureEnvVars(); err != nil {
+		return nil, err
+	}
+
 	pool, err := data.InitializeDatabase()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
