@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/gin-contrib/cors"
@@ -9,11 +10,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/0p5dev/controller/internal/data"
+	"github.com/0p5dev/controller/internal/data/models"
 	"github.com/0p5dev/controller/internal/middleware"
 )
 
 type App struct {
 	Pool *pgxpool.Pool
+	Hub  *Hub
 }
 
 func ensureEnvVars() error {
@@ -62,7 +65,19 @@ func Initialize(router *gin.Engine) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
-	app := &App{Pool: pool}
+	app := &App{
+		Pool: pool,
+		Hub:  &Hub{clients: make(map[string][]chan string)},
+	}
+
+	go func() {
+		if err := data.ListenForProvisioningJobUpdates(func(update models.ProvisioningJobUpdate) {
+			slog.Info("Received provisioning job update", "update", update)
+			app.Hub.Broadcast(update)
+		}); err != nil {
+			slog.Error("Error listening for provisioning job updates, disconnected", "error", err)
+		}
+	}()
 
 	app.CreateRoutes(router)
 

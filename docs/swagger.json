@@ -405,6 +405,62 @@
                     }
                 }
             }
+        },
+        "/provisioning-jobs/{deployment_id}/status": {
+            "get": {
+                "description": "Streams provisioning status updates for a deployment using Server-Sent Events (SSE). Events are emitted until status becomes succeeded or failed, or the client disconnects.",
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "provisioning-jobs"
+                ],
+                "summary": "Stream provisioning job status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Deployment ID",
+                        "name": "deployment_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream of provisioning status updates",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "deployment_id is required",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "provisioning job not found for deployment_id",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "failed to query provisioning job status",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {

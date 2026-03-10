@@ -13,7 +13,8 @@ func (app *App) CreateRoutes(router *gin.Engine) {
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, url))
 
 	apiv1 := router.Group("/api/v1")
-	apiv1.GET("/health", app.CheckHealth)
+	apiv1.GET("/health", app.checkHealth)
+	apiv1.GET("/provisioning-jobs/:deployment_id/status", app.getProvisioningJobStatus)
 
 	containerImages := apiv1.Group("/container-images")
 	containerImages.Use(middleware.AuthMiddleware())

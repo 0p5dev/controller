@@ -340,6 +340,45 @@ paths:
       summary: Health check
       tags:
       - health
+  /provisioning-jobs/{deployment_id}/status:
+    get:
+      description: Streams provisioning status updates for a deployment using Server-Sent
+        Events (SSE). Events are emitted until status becomes succeeded or failed,
+        or the client disconnects.
+      parameters:
+      - description: Deployment ID
+        in: path
+        name: deployment_id
+        required: true
+        type: string
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE stream of provisioning status updates
+          schema:
+            type: string
+        "400":
+          description: deployment_id is required
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: provisioning job not found for deployment_id
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: failed to query provisioning job status
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stream provisioning job status
+      tags:
+      - provisioning-jobs
 securityDefinitions:
   BearerAuth:
     description: 'Bearer JWT token in the format: Bearer <token>'
