@@ -21,6 +21,7 @@ type ProvisioningJobUpdate struct {
 	Status      string  `json:"status"` // pending | succeeded | failed
 	CreatedAt   string  `json:"created_at"`
 	CompletedAt *string `json:"completed_at"`
+	ServiceUrl  *string `json:"service_url"`
 }
 
 func MigrateProvisioningJobTable(pool *pgxpool.Pool) error {

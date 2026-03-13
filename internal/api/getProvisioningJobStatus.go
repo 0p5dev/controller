@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -63,15 +65,22 @@ func (app *App) getProvisioningJobStatus(c *gin.Context) {
 	for {
 		select {
 		case statusUpdate := <-statusChan:
-			statusUpdateJson, err := json.Marshal(statusUpdate)
-			if err != nil {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-					"error": "failed to marshal provisioning job update",
-				})
-				return
+			statusUpdateJson, _ := json.Marshal(map[string]string{"error": "failed to parse provisioning job update"})
+
+			if statusUpdate.Status == "succeeded" {
+				serviceUrl := "URL not available"
+				err := app.Pool.QueryRow(context.Background(), "SELECT url FROM deployments WHERE id = (SELECT resource_id FROM provisioning_jobs WHERE id = $1)", jobId).Scan(&serviceUrl)
+				if err != nil {
+					slog.Error("Failed to query service URL for completed provisioning job", "job_id", jobId, "error", err.Error())
+				}
+				statusUpdate.ServiceUrl = &serviceUrl
 			}
+
+			statusUpdateJson, _ = json.Marshal(statusUpdate)
+
 			c.SSEvent("message", string(statusUpdateJson))
 			c.Writer.Flush()
+
 			if statusUpdate.Status == "succeeded" || statusUpdate.Status == "failed" {
 				return
 			}
