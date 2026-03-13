@@ -8,24 +8,27 @@ import (
 )
 
 type ProvisioningJob struct {
-	DeploymentId string    `json:"deployment_id"`
-	Status       string    `json:"status"` // pending | succeeded | failed
-	CreatedAt    time.Time `json:"created_at"`
-	CompletedAt  time.Time `json:"completed_at"`
+	Id          string    `json:"id"`
+	ResourceId  string    `json:"resource_id"`
+	Status      string    `json:"status"` // pending | succeeded | failed
+	CreatedAt   time.Time `json:"created_at"`
+	CompletedAt time.Time `json:"completed_at"`
 }
 
 type ProvisioningJobUpdate struct {
-	DeploymentId string  `json:"deployment_id"`
-	Status       string  `json:"status"` // pending | succeeded | failed
-	CreatedAt    string  `json:"created_at"`
-	CompletedAt  *string `json:"completed_at"`
+	Id          string  `json:"id"`
+	ResourceId  string  `json:"resource_id"`
+	Status      string  `json:"status"` // pending | succeeded | failed
+	CreatedAt   string  `json:"created_at"`
+	CompletedAt *string `json:"completed_at"`
 }
 
 func MigrateProvisioningJobTable(pool *pgxpool.Pool) error {
 	ctx := context.Background()
 	_, err := pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS provisioning_jobs (
-			deployment_id TEXT PRIMARY KEY,
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			resource_id TEXT NOT NULL,
 			status TEXT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			completed_at TIMESTAMPTZ
@@ -43,7 +46,8 @@ func MigrateProvisioningJobTable(pool *pgxpool.Pool) error {
 			 OR (OLD.completed_at IS DISTINCT FROM NEW.completed_at) THEN
 		
 			payload := json_build_object(
-			  'deployment_id', NEW.deployment_id,
+			  'id', NEW.id,
+			  'resource_id', NEW.resource_id,
 			  'status', NEW.status,
 			  'completed_at', NEW.completed_at,
 			  'created_at', NEW.created_at

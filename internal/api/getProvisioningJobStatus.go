@@ -1,35 +1,37 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
+	"github.com/0p5dev/controller/internal/data/models"
 	"github.com/gin-gonic/gin"
 )
 
 // @Summary Stream provisioning job status
-// @Description Streams provisioning status updates for a deployment using Server-Sent Events (SSE). Events are emitted until status becomes succeeded or failed, or the client disconnects.
+// @Description Streams provisioning status updates for a resource using Server-Sent Events (SSE). Events are emitted until status becomes succeeded or failed, or the client disconnects.
 // @Tags provisioning-jobs
 // @Produce text/event-stream
-// @Param deployment_id path string true "Deployment ID"
+// @Param job_id path string true "Job ID"
 // @Success 200 {string} string "SSE stream of provisioning status updates"
-// @Failure 400 {object} map[string]string "deployment_id is required"
-// @Failure 404 {object} map[string]string "provisioning job not found for deployment_id"
+// @Failure 400 {object} map[string]string "job_id is required"
+// @Failure 404 {object} map[string]string "provisioning job not found for job_id"
 // @Failure 500 {object} map[string]string "failed to query provisioning job status"
-// @Router /provisioning-jobs/{deployment_id}/status [get]
+// @Router /provisioning-jobs/{job_id}/status [get]
 func (app *App) getProvisioningJobStatus(c *gin.Context) {
-	deploymentId := c.Param("deployment_id")
-	if deploymentId == "" {
+	jobId := c.Param("job_id")
+	if jobId == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"error": "deployment_id is required",
+			"error": "job_id is required",
 		})
 		return
 	}
 
-	// Check if row in provisioning_jobs table exists for this deployment
+	// Check if row in provisioning_jobs table exists for this job
 	ctx := c.Request.Context()
 	var exists bool
-	err := app.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM provisioning_jobs WHERE deployment_id = $1)", deploymentId).Scan(&exists)
+	err := app.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM provisioning_jobs WHERE id = $1 AND completed_at IS NULL)", jobId).Scan(&exists)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to query provisioning job status",
@@ -38,7 +40,7 @@ func (app *App) getProvisioningJobStatus(c *gin.Context) {
 	}
 	if !exists {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-			"error": "provisioning job not found for " + deploymentId,
+			"error": "provisioning job either not found or already completed for " + jobId,
 		})
 		return
 	}
@@ -50,9 +52,9 @@ func (app *App) getProvisioningJobStatus(c *gin.Context) {
 	c.Header("Transfer-Encoding", "chunked")
 
 	// Create a channel to receive provisioning job status updates
-	statusChan := make(chan string)
-	app.Hub.registerClient(deploymentId, statusChan)
-	defer app.Hub.unregisterClient(deploymentId, statusChan)
+	statusChan := make(chan models.ProvisioningJobUpdate)
+	app.Hub.registerClient(jobId, statusChan)
+	defer app.Hub.unregisterClient(jobId, statusChan)
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -61,16 +63,23 @@ func (app *App) getProvisioningJobStatus(c *gin.Context) {
 	for {
 		select {
 		case statusUpdate := <-statusChan:
-			c.SSEvent("message", statusUpdate)
+			statusUpdateJson, err := json.Marshal(statusUpdate)
+			if err != nil {
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"error": "failed to marshal provisioning job update",
+				})
+				return
+			}
+			c.SSEvent("message", string(statusUpdateJson))
 			c.Writer.Flush()
-			if statusUpdate == "succeeded" || statusUpdate == "failed" {
+			if statusUpdate.Status == "succeeded" || statusUpdate.Status == "failed" {
 				return
 			}
 		case <-c.Request.Context().Done():
 			return
 		case <-ticker.C:
 			// Optionally, send a heartbeat to keep the connection alive
-			c.SSEvent("update", "pending")
+			c.SSEvent("update", "provisioning job in progress...")
 			c.Writer.Flush()
 		}
 	}

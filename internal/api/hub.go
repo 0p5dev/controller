@@ -8,27 +8,27 @@ import (
 
 type Hub struct {
 	mu      sync.RWMutex
-	clients map[string][]chan string
+	clients map[string][]chan models.ProvisioningJobUpdate // map of deploymentId to list of client channels
 }
 
-func (hub *Hub) registerClient(deploymentId string, statusChan chan string) {
+func (hub *Hub) registerClient(jobId string, statusChan chan models.ProvisioningJobUpdate) {
 	hub.mu.Lock()
 	defer hub.mu.Unlock()
-	hub.clients[deploymentId] = append(hub.clients[deploymentId], statusChan)
+	hub.clients[jobId] = append(hub.clients[jobId], statusChan)
 }
 
-func (hub *Hub) unregisterClient(deploymentId string, statusChan chan string) {
+func (hub *Hub) unregisterClient(jobId string, statusChan chan models.ProvisioningJobUpdate) {
 	hub.mu.Lock()
 	defer hub.mu.Unlock()
-	chans := hub.clients[deploymentId]
+	chans := hub.clients[jobId]
 	for i, ch := range chans {
 		if ch == statusChan {
-			hub.clients[deploymentId] = append(chans[:i], chans[i+1:]...)
+			hub.clients[jobId] = append(chans[:i], chans[i+1:]...)
 			break
 		}
 	}
-	if len(hub.clients[deploymentId]) == 0 {
-		delete(hub.clients, deploymentId)
+	if len(hub.clients[jobId]) == 0 {
+		delete(hub.clients, jobId)
 	}
 	close(statusChan)
 }
@@ -36,9 +36,9 @@ func (hub *Hub) unregisterClient(deploymentId string, statusChan chan string) {
 func (hub *Hub) Broadcast(update models.ProvisioningJobUpdate) {
 	hub.mu.RLock()
 	defer hub.mu.RUnlock()
-	if chans, exists := hub.clients[update.DeploymentId]; exists {
+	if chans, exists := hub.clients[update.Id]; exists {
 		for _, ch := range chans {
-			ch <- update.Status
+			ch <- update
 		}
 	}
 }

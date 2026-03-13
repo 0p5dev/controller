@@ -1,0 +1,274 @@
+package api
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"strings"
+
+	run "cloud.google.com/go/run/apiv2"
+	runpb "cloud.google.com/go/run/apiv2/runpb"
+	"github.com/0p5dev/controller/internal/data/models"
+	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
+	"github.com/gin-gonic/gin"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+)
+
+type UpdateDeploymentRequestBody struct {
+	ContainerImage *string `json:"container_image,omitempty"`
+	MinInstances   *int    `json:"min_instances,omitempty,string"`
+	MaxInstances   *int    `json:"max_instances,omitempty,string"`
+	Port           *int    `json:"port,omitempty,string"`
+}
+
+func (app *App) updateDeploymentByName(c *gin.Context) {
+	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
+
+	ctx := context.Background()
+	reqCtx := c.Request.Context()
+
+	deploymentName := c.Param("name")
+	if deploymentName == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "deployment name is required",
+		})
+		return
+	}
+
+	var reqBody UpdateDeploymentRequestBody
+	if err := c.ShouldBindJSON(&reqBody); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "invalid request body",
+		})
+		return
+	}
+
+	// ensure deployment exists and belongs to user, return a 404 otherwise
+	var currentDeployment models.Deployment
+	err := app.Pool.QueryRow(reqCtx, "SELECT id, container_image, min_instances, max_instances, port FROM deployments WHERE name = $1 AND user_email = $2", deploymentName, userClaims.Email).Scan(
+		&currentDeployment.Id,
+		&currentDeployment.ContainerImage,
+		&currentDeployment.MinInstances,
+		&currentDeployment.MaxInstances,
+		&currentDeployment.Port,
+	)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": "deployment " + deploymentName + " not found",
+		})
+		return
+	}
+
+	// Create entry in provisioning_jobs table and return job ID to client
+	var jobId string
+	err = app.Pool.QueryRow(reqCtx, "INSERT INTO provisioning_jobs (resource_id, status) VALUES ($1, 'pending') RETURNING id", currentDeployment.Id).Scan(&jobId)
+	if err != nil {
+		slog.Error("Failed to create provisioning job", "resource_id", currentDeployment.Id, "error", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to create provisioning job, update canceled",
+		})
+		return
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": "Updating deployment " + deploymentName,
+		"job_id":  jobId,
+	})
+
+	go func() {
+		projectID := os.Getenv("GCP_PROJECT_ID")
+		region := os.Getenv("GCP_REGION")
+
+		parent := fmt.Sprintf("projects/%s/locations/%s", projectID, region)
+		serviceFullName := fmt.Sprintf("%s/services/%s", parent, currentDeployment.Id)
+
+		servicesClient, err := run.NewServicesClient(ctx)
+		if err != nil {
+			slog.Error("Failed to create Cloud Run client", "error", err.Error())
+			app.failProvisioningJob(ctx, jobId, "failed to create Cloud Run client: "+err.Error())
+			return
+		}
+		defer servicesClient.Close()
+
+		// Resolve effective values: use the request value if provided, otherwise keep existing
+		effectiveImage := currentDeployment.ContainerImage
+		if reqBody.ContainerImage != nil {
+			effectiveImage = *reqBody.ContainerImage
+		}
+
+		effectiveMin := currentDeployment.MinInstances
+		if reqBody.MinInstances != nil {
+			effectiveMin = *reqBody.MinInstances
+		}
+
+		effectiveMax := currentDeployment.MaxInstances
+		if reqBody.MaxInstances != nil {
+			effectiveMax = *reqBody.MaxInstances
+		}
+
+		effectivePort := currentDeployment.Port
+		if reqBody.Port != nil {
+			effectivePort = *reqBody.Port
+		}
+
+		// Build the update mask dynamically: only include paths for fields being changed
+		maskPaths := []string{"traffic"}
+
+		if reqBody.MinInstances != nil {
+			maskPaths = append(maskPaths, "scaling.min_instance_count", "template.scaling.min_instance_count")
+		}
+		if reqBody.MaxInstances != nil {
+			maskPaths = append(maskPaths, "scaling.max_instance_count", "template.scaling.max_instance_count")
+		}
+		if reqBody.ContainerImage != nil || reqBody.Port != nil {
+			maskPaths = append(maskPaths, "template.containers")
+		}
+		if reqBody.Port != nil {
+			maskPaths = append(maskPaths, "template.containers.ports")
+		}
+
+		if len(maskPaths) == 0 {
+			slog.Info("No fields to update", "deployment", deploymentName)
+			app.succeedProvisioningJob(ctx, jobId)
+			return
+		}
+
+		serviceSpec := &runpb.Service{
+			Name: serviceFullName,
+			Scaling: &runpb.ServiceScaling{
+				MinInstanceCount: int32(effectiveMin),
+				MaxInstanceCount: int32(effectiveMax),
+			},
+			Traffic: []*runpb.TrafficTarget{
+				{
+					Type:    runpb.TrafficTargetAllocationType_TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST,
+					Percent: 100,
+				},
+			},
+			Template: &runpb.RevisionTemplate{
+				Scaling: &runpb.RevisionScaling{
+					MinInstanceCount: int32(effectiveMin),
+					MaxInstanceCount: int32(effectiveMax),
+				},
+				Containers: []*runpb.Container{
+					{
+						Image: effectiveImage,
+						Ports: []*runpb.ContainerPort{
+							{ContainerPort: int32(effectivePort)},
+						},
+					},
+				},
+			},
+		}
+
+		updateOperation, err := servicesClient.UpdateService(ctx, &runpb.UpdateServiceRequest{
+			Service:    serviceSpec,
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: maskPaths},
+		})
+
+		if err != nil {
+			slog.Error("Failed to update Cloud Run service", "service", serviceFullName, "error", err.Error())
+			app.failProvisioningJob(ctx, jobId, "failed to update Cloud Run service: "+err.Error())
+			rollbackToPreviousRevision(ctx, serviceFullName, servicesClient)
+			return
+		}
+
+		_, err = updateOperation.Wait(ctx)
+		if err != nil {
+			slog.Error("Failed waiting for Cloud Run update", "service", serviceFullName, "error", err.Error())
+			app.failProvisioningJob(ctx, jobId, "failed waiting for Cloud Run update: "+err.Error())
+			rollbackToPreviousRevision(ctx, serviceFullName, servicesClient)
+			return
+		}
+
+		_, err = app.Pool.Exec(ctx, "UPDATE deployments SET container_image = $1, min_instances = $2, max_instances = $3, port = $4, updated_at = NOW() WHERE id = $5", effectiveImage, effectiveMin, effectiveMax, effectivePort, currentDeployment.Id)
+		if err != nil {
+			slog.Error("Failed to update deployment record in database", "deployment_id", currentDeployment.Id, "error", err.Error())
+			app.failProvisioningJob(ctx, jobId, "failed to update deployment record in database: "+err.Error())
+			rollbackToPreviousRevision(ctx, serviceFullName, servicesClient)
+			return
+		}
+
+		app.succeedProvisioningJob(ctx, jobId)
+	}()
+}
+
+func (app *App) succeedProvisioningJob(ctx context.Context, jobId string) {
+	_, execErr := app.Pool.Exec(ctx, "UPDATE provisioning_jobs SET status = 'succeeded', completed_at = NOW() WHERE id = $1", jobId)
+	if execErr != nil {
+		slog.Error("Failed to update provisioning job status", "job_id", jobId, "error", execErr.Error())
+	}
+}
+
+func (app *App) failProvisioningJob(ctx context.Context, jobId string, errMsg string) {
+	slog.Error("Provisioning job failed", "job_id", jobId, "error", errMsg)
+	_, execErr := app.Pool.Exec(ctx, "UPDATE provisioning_jobs SET status = 'failed', completed_at = NOW() WHERE id = $1", jobId)
+	if execErr != nil {
+		slog.Error("Failed to update provisioning job status", "job_id", jobId, "error", execErr.Error())
+	}
+}
+
+func rollbackToPreviousRevision(ctx context.Context, serviceFullName string, servicesClient *run.ServicesClient) {
+	revisionsClient, err := run.NewRevisionsClient(ctx)
+	if err != nil {
+		slog.Error("Failed to create Revisions client for rollback", "service", serviceFullName, "error", err.Error())
+		return
+	}
+	defer revisionsClient.Close()
+
+	iter := revisionsClient.ListRevisions(ctx, &runpb.ListRevisionsRequest{
+		Parent: serviceFullName,
+	})
+
+	var revisionNames []string
+	for {
+		rev, err := iter.Next()
+		if err != nil {
+			break
+		}
+
+		shortName := rev.GetName()
+		if idx := strings.LastIndex(shortName, "/"); idx >= 0 {
+			shortName = shortName[idx+1:]
+		}
+
+		revisionNames = append(revisionNames, shortName)
+		if len(revisionNames) >= 2 {
+			break
+		}
+	}
+
+	if len(revisionNames) < 2 {
+		slog.Error("Not enough revisions to perform rollback", "service", serviceFullName)
+		return
+	}
+
+	// revisionNames[0] is the latest; revisionNames[1] is the one to roll back to
+	previousRevision := revisionNames[1]
+
+	// Route 100% of traffic to the previous revision
+	updateOperation, err := servicesClient.UpdateService(ctx, &runpb.UpdateServiceRequest{
+		Service: &runpb.Service{
+			Name: serviceFullName,
+			Traffic: []*runpb.TrafficTarget{
+				{
+					Type:     runpb.TrafficTargetAllocationType_TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION,
+					Revision: previousRevision,
+					Percent:  100,
+				},
+			},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"traffic"}},
+	})
+	if err != nil {
+		slog.Error("Failed to update service traffic for rollback", "service", serviceFullName, "error", err.Error())
+		return
+	}
+
+	if _, err = updateOperation.Wait(ctx); err != nil {
+		slog.Error("Failed waiting for rollback operation to complete", "service", serviceFullName, "error", err.Error())
+		return
+	}
+}

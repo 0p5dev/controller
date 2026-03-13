@@ -14,7 +14,7 @@ func (app *App) CreateRoutes(router *gin.Engine) {
 
 	apiv1 := router.Group("/api/v1")
 	apiv1.GET("/health", app.checkHealth)
-	apiv1.GET("/provisioning-jobs/:deployment_id/status", app.getProvisioningJobStatus)
+	apiv1.GET("/provisioning-jobs/:job_id/status", app.getProvisioningJobStatus)
 
 	containerImages := apiv1.Group("/container-images")
 	containerImages.Use(middleware.AuthMiddleware())
@@ -23,7 +23,8 @@ func (app *App) CreateRoutes(router *gin.Engine) {
 	deployments := apiv1.Group("/deployments")
 	deployments.Use(middleware.AuthMiddleware())
 	deployments.GET("/:name", app.getDeploymentByName)
-	deployments.GET("", app.listDeployments)
-	deployments.PUT("", app.createDeployment)
+	deployments.PATCH("/:name", app.updateDeploymentByName)
 	deployments.DELETE("/:name", app.deleteDeploymentByName)
+	deployments.GET("", app.listDeployments)
+	deployments.POST("", app.createDeployment)
 }

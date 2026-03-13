@@ -67,7 +67,7 @@ func Initialize(router *gin.Engine) (*pgxpool.Pool, error) {
 
 	app := &App{
 		Pool: pool,
-		Hub:  &Hub{clients: make(map[string][]chan string)},
+		Hub:  &Hub{clients: make(map[string][]chan models.ProvisioningJobUpdate)},
 	}
 
 	go func() {

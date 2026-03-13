@@ -204,130 +204,137 @@ func (app *App) createDeployment(c *gin.Context) {
 		return
 	}
 
-	applyRequestDefaults(&req)
+	// Send 202 to client and provision in a goroutine
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": "Provisioning deployment",
+	})
 
-	// Check for existing deployment with the same name
-	hashedEmail := hashEmail(userClaims.Email)
-	serviceId := fmt.Sprintf("%s-%s", req.Name, hashedEmail)
-	updateNeeded := false
+	go func() {
+		applyRequestDefaults(&req)
 
-	var existingDeployment bool
-	err := app.Pool.QueryRow(c.Request.Context(), `SELECT EXISTS(SELECT 1 FROM deployments WHERE id=$1)`, serviceId).Scan(&existingDeployment)
-	if err != nil {
-		slog.Error("Failed to check existing deployments", "error", err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to check existing deployments: %v", err),
-		})
-		return
-	}
+		// Check for existing deployment with the same name
+		hashedEmail := hashEmail(userClaims.Email)
+		serviceId := fmt.Sprintf("%s-%s", req.Name, hashedEmail)
+		updateNeeded := false
 
-	if existingDeployment {
-		updateNeeded = true
-	}
+		var existingDeployment bool
+		err := app.Pool.QueryRow(c.Request.Context(), `SELECT EXISTS(SELECT 1 FROM deployments WHERE id=$1)`, serviceId).Scan(&existingDeployment)
+		if err != nil {
+			slog.Error("Failed to check existing deployments", "error", err.Error())
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to check existing deployments: %v", err),
+			})
+			return
+		}
 
-	ctx := context.Background()
-	reqCtx := c.Request.Context()
+		if existingDeployment {
+			updateNeeded = true
+		}
 
-	projectID := os.Getenv("GCP_PROJECT_ID")
-	region := os.Getenv("GCP_REGION")
+		ctx := context.Background()
+		reqCtx := c.Request.Context()
 
-	parent := fmt.Sprintf("projects/%s/locations/%s", projectID, region)
-	serviceFullName := fmt.Sprintf("%s/services/%s", parent, serviceId)
+		projectID := os.Getenv("GCP_PROJECT_ID")
+		region := os.Getenv("GCP_REGION")
 
-	servicesClient, err := run.NewServicesClient(ctx)
-	if err != nil {
-		slog.Error("Failed to create Cloud Run client", "error", err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to create Cloud Run client: %v", err),
-		})
-		return
-	}
-	defer servicesClient.Close()
+		parent := fmt.Sprintf("projects/%s/locations/%s", projectID, region)
+		serviceFullName := fmt.Sprintf("%s/services/%s", parent, serviceId)
 
-	service, err := upsertCloudRunService(reqCtx, servicesClient, parent, serviceFullName, serviceId, req, hashedEmail, updateNeeded)
+		servicesClient, err := run.NewServicesClient(ctx)
+		if err != nil {
+			slog.Error("Failed to create Cloud Run client", "error", err.Error())
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to create Cloud Run client: %v", err),
+			})
+			return
+		}
+		defer servicesClient.Close()
 
-	if err != nil {
-		// Check if cancellation was the cause
-		if reqCtx.Err() != nil {
-			slog.Warn("Deployment cancelled, initiating cleanup", "deployment", req.Name)
+		service, err := upsertCloudRunService(reqCtx, servicesClient, parent, serviceFullName, serviceId, req, hashedEmail, updateNeeded)
 
-			// Use fresh context for cleanup operations
-			cleanupCtx := context.Background()
+		if err != nil {
+			// Check if cancellation was the cause
+			if reqCtx.Err() != nil {
+				slog.Warn("Deployment cancelled, initiating cleanup", "deployment", req.Name)
 
-			// Attempt to delete partially created service
-			if cleanupErr := deleteCloudRunServiceIfExists(cleanupCtx, servicesClient, serviceFullName); cleanupErr != nil {
-				slog.Error("Failed to cleanup after cancellation", "error", cleanupErr.Error())
+				// Use fresh context for cleanup operations
+				cleanupCtx := context.Background()
+
+				// Attempt to delete partially created service
+				if cleanupErr := deleteCloudRunServiceIfExists(cleanupCtx, servicesClient, serviceFullName); cleanupErr != nil {
+					slog.Error("Failed to cleanup after cancellation", "error", cleanupErr.Error())
+					c.AbortWithStatusJSON(http.StatusRequestTimeout, gin.H{
+						"error": "Deployment cancelled by client. Some resources may need manual cleanup.",
+					})
+					return
+				}
+
+				slog.Info("Successfully cleaned up resources after cancellation", "deployment", req.Name)
+
 				c.AbortWithStatusJSON(http.StatusRequestTimeout, gin.H{
-					"error": "Deployment cancelled by client. Some resources may need manual cleanup.",
+					"error": "Deployment cancelled by client",
+				})
+				return
+			}
+			slog.Error("Failed to deploy Cloud Run service", "error", err.Error())
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to deploy Cloud Run service: %v", err),
+			})
+			return
+		}
+
+		var serviceUrl string
+		if service != nil && service.Uri != "" {
+			serviceUrl = service.Uri
+		} else {
+			slog.Warn("serviceUrl not found in Cloud Run response", "deployment", req.Name)
+			serviceUrl = "URL not available"
+		}
+
+		// Ensure public access using Cloud Run service IAM policy
+		if err := ensurePublicInvokerAccess(ctx, servicesClient, serviceFullName); err != nil {
+			slog.Error("Failed to set IAM policy", "error", err.Error())
+			// Attempt to delete the service since it's not publicly accessible and likely unusable for the user
+			if cleanupErr := deleteCloudRunServiceIfExists(context.Background(), servicesClient, serviceFullName); cleanupErr != nil {
+				slog.Error("Failed to cleanup after IAM policy failure. Cloud Run service may need manual cleanup", "error", cleanupErr.Error())
+			}
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Deployment failed, unable to configure public access: %v", err),
+			})
+			return
+		}
+
+		// Record deployment in database
+		if updateNeeded {
+			_, err := app.Pool.Exec(ctx, `UPDATE deployments SET container_image=$1, min_instances=$2, max_instances=$3 WHERE id=$4`, req.ContainerImage, req.MinInstances, req.MaxInstances, serviceId)
+			if err != nil {
+				slog.Error("Failed to update deployment record", "error", err.Error())
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"error": fmt.Sprintf("Failed to update deployment record: %v", err),
 				})
 				return
 			}
 
-			slog.Info("Successfully cleaned up resources after cancellation", "deployment", req.Name)
-
-			c.AbortWithStatusJSON(http.StatusRequestTimeout, gin.H{
-				"error": "Deployment cancelled by client",
+			c.JSON(http.StatusOK, gin.H{
+				"service_url": serviceUrl,
 			})
 			return
-		}
-		slog.Error("Failed to deploy Cloud Run service", "error", err.Error())
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Failed to deploy Cloud Run service: %v", err),
-		})
-		return
-	}
-
-	var serviceUrl string
-	if service != nil && service.Uri != "" {
-		serviceUrl = service.Uri
-	} else {
-		slog.Warn("serviceUrl not found in Cloud Run response", "deployment", req.Name)
-		serviceUrl = "URL not available"
-	}
-
-	// Ensure public access using Cloud Run service IAM policy
-	if err := ensurePublicInvokerAccess(ctx, servicesClient, serviceFullName); err != nil {
-		slog.Error("Failed to set IAM policy", "error", err.Error())
-		// Attempt to delete the service since it's not publicly accessible and likely unusable for the user
-		if cleanupErr := deleteCloudRunServiceIfExists(context.Background(), servicesClient, serviceFullName); cleanupErr != nil {
-			slog.Error("Failed to cleanup after IAM policy failure. Cloud Run service may need manual cleanup", "error", cleanupErr.Error())
-		}
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Deployment failed, unable to configure public access: %v", err),
-		})
-		return
-	}
-
-	// Record deployment in database
-	if updateNeeded {
-		_, err := app.Pool.Exec(ctx, `UPDATE deployments SET container_image=$1, min_instances=$2, max_instances=$3 WHERE id=$4`, req.ContainerImage, req.MinInstances, req.MaxInstances, serviceId)
-		if err != nil {
-			slog.Error("Failed to update deployment record", "error", err.Error())
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to update deployment record: %v", err),
-			})
-			return
+		} else {
+			_, err = app.Pool.Exec(ctx, `
+				INSERT INTO deployments (id, name, url, container_image, user_email, min_instances, max_instances)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)
+			`, serviceId, req.Name, serviceUrl, req.ContainerImage, userClaims.Email, req.MinInstances, req.MaxInstances)
+			if err != nil {
+				slog.Error("Failed to record deployment in database", "error", err.Error())
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"error": fmt.Sprintf("Failed to record deployment in database: %v", err),
+				})
+				return
+			}
 		}
 
 		c.JSON(http.StatusOK, gin.H{
 			"service_url": serviceUrl,
 		})
-		return
-	} else {
-		_, err = app.Pool.Exec(ctx, `
-				INSERT INTO deployments (id, name, url, container_image, user_email, min_instances, max_instances)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)
-			`, serviceId, req.Name, serviceUrl, req.ContainerImage, userClaims.Email, req.MinInstances, req.MaxInstances)
-		if err != nil {
-			slog.Error("Failed to record deployment in database", "error", err.Error())
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("Failed to record deployment in database: %v", err),
-			})
-			return
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"service_url": serviceUrl,
-	})
+	}()
 }
