@@ -164,13 +164,13 @@ const docTemplate = `{
                     }
                 }
             },
-            "put": {
+            "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Deploy a container image to Cloud Run",
+                "description": "Queue creation of a deployment in Cloud Run and return a provisioning job ID",
                 "consumes": [
                     "application/json"
                 ],
@@ -193,8 +193,8 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "Deployment successful with service URL",
+                    "202": {
+                        "description": "Provisioning job accepted",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -220,8 +220,8 @@ const docTemplate = `{
                             }
                         }
                     },
-                    "408": {
-                        "description": "Deployment cancelled by client",
+                    "409": {
+                        "description": "Deployment already exists",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -230,7 +230,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Deployment failed",
+                        "description": "Failed to queue deployment",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -380,6 +380,89 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Queue an update for an existing deployment. Omitted fields keep their current values.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deployments"
+                ],
+                "summary": "Update deployment by name",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Deployment name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Deployment fields to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.UpdateDeploymentRequestBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Provisioning job accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request body or missing deployment name",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Deployment not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to queue update",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
             }
         },
         "/health": {
@@ -412,9 +495,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/provisioning-jobs/{deployment_id}/status": {
+        "/provisioning-jobs/{job_id}/status": {
             "get": {
-                "description": "Streams provisioning status updates for a deployment using Server-Sent Events (SSE). Events are emitted until status becomes succeeded or failed, or the client disconnects.",
+                "description": "Streams provisioning status updates for a resource using Server-Sent Events (SSE). Events are emitted until status becomes succeeded or failed, or the client disconnects.",
                 "produces": [
                     "text/event-stream"
                 ],
@@ -425,8 +508,8 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Deployment ID",
-                        "name": "deployment_id",
+                        "description": "Job ID",
+                        "name": "job_id",
                         "in": "path",
                         "required": true
                     }
@@ -439,7 +522,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "deployment_id is required",
+                        "description": "job_id is required",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -448,7 +531,7 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "provisioning job not found for deployment_id",
+                        "description": "provisioning job not found for job_id",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -529,16 +612,19 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "max_instances": {
-                    "type": "integer"
+                    "type": "string",
+                    "example": "0"
                 },
                 "min_instances": {
-                    "type": "integer"
+                    "type": "string",
+                    "example": "0"
                 },
                 "name": {
                     "type": "string"
                 },
                 "port": {
-                    "type": "integer"
+                    "type": "string",
+                    "example": "0"
                 }
             }
         },
@@ -550,6 +636,26 @@ const docTemplate = `{
                 },
                 "min_instances": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.UpdateDeploymentRequestBody": {
+            "type": "object",
+            "properties": {
+                "container_image": {
+                    "type": "string"
+                },
+                "max_instances": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "min_instances": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "port": {
+                    "type": "string",
+                    "example": "0"
                 }
             }
         },
@@ -573,6 +679,9 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "port": {
+                    "type": "integer"
                 },
                 "updated_at": {
                     "type": "string"

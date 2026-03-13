@@ -23,6 +23,20 @@ type UpdateDeploymentRequestBody struct {
 	Port           *int    `json:"port,omitempty,string"`
 }
 
+// @Summary Update deployment by name
+// @Description Queue an update for an existing deployment. Omitted fields keep their current values.
+// @Tags deployments
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param name path string true "Deployment name"
+// @Param request body api.UpdateDeploymentRequestBody true "Deployment fields to update"
+// @Success 202 {object} map[string]string "Provisioning job accepted"
+// @Failure 400 {object} map[string]string "Invalid request body or missing deployment name"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Deployment not found"
+// @Failure 500 {object} map[string]string "Failed to queue update"
+// @Router /deployments/{name} [patch]
 func (app *App) updateDeploymentByName(c *gin.Context) {
 	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
 
@@ -98,15 +112,7 @@ func (app *App) updateDeploymentByName(c *gin.Context) {
 			effectiveImage = *reqBody.ContainerImage
 		}
 
-		effectiveMin := currentDeployment.MinInstances
-		if reqBody.MinInstances != nil {
-			effectiveMin = *reqBody.MinInstances
-		}
-
-		effectiveMax := currentDeployment.MaxInstances
-		if reqBody.MaxInstances != nil {
-			effectiveMax = *reqBody.MaxInstances
-		}
+		effectiveMin, effectiveMax := validateMinAndMaxInstances(reqBody.MinInstances, reqBody.MaxInstances)
 
 		effectivePort := currentDeployment.Port
 		if reqBody.Port != nil {
@@ -193,21 +199,6 @@ func (app *App) updateDeploymentByName(c *gin.Context) {
 
 		app.succeedProvisioningJob(ctx, jobId)
 	}()
-}
-
-func (app *App) succeedProvisioningJob(ctx context.Context, jobId string) {
-	_, execErr := app.Pool.Exec(ctx, "UPDATE provisioning_jobs SET status = 'succeeded', completed_at = NOW() WHERE id = $1", jobId)
-	if execErr != nil {
-		slog.Error("Failed to update provisioning job status", "job_id", jobId, "error", execErr.Error())
-	}
-}
-
-func (app *App) failProvisioningJob(ctx context.Context, jobId string, errMsg string) {
-	slog.Error("Provisioning job failed", "job_id", jobId, "error", errMsg)
-	_, execErr := app.Pool.Exec(ctx, "UPDATE provisioning_jobs SET status = 'failed', completed_at = NOW() WHERE id = $1", jobId)
-	if execErr != nil {
-		slog.Error("Failed to update provisioning job status", "job_id", jobId, "error", execErr.Error())
-	}
 }
 
 func rollbackToPreviousRevision(ctx context.Context, serviceFullName string, servicesClient *run.ServicesClient) {

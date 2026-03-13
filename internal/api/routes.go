@@ -1,6 +1,8 @@
 package api
 
 import (
+	"os"
+
 	_ "github.com/0p5dev/controller/docs"
 	"github.com/0p5dev/controller/internal/middleware"
 	"github.com/gin-gonic/gin"
@@ -9,7 +11,12 @@ import (
 )
 
 func (app *App) CreateRoutes(router *gin.Engine) {
-	url := ginSwagger.URL("http://localhost:8080/swagger/doc.json")
+	swaggerUrl := "http://localhost:8080/swagger/doc.json"
+	if os.Getenv("GIN_MODE") == "release" {
+		swaggerUrl = "https://controller.0p5.dev/swagger/doc.json"
+	}
+
+	url := ginSwagger.URL(swaggerUrl)
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, url))
 
 	apiv1 := router.Group("/api/v1")

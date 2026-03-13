@@ -39,13 +39,16 @@ definitions:
       container_image:
         type: string
       max_instances:
-        type: integer
+        example: "0"
+        type: string
       min_instances:
-        type: integer
+        example: "0"
+        type: string
       name:
         type: string
       port:
-        type: integer
+        example: "0"
+        type: string
     type: object
   api.ServiceScaling:
     properties:
@@ -53,6 +56,20 @@ definitions:
         type: integer
       min_instances:
         type: integer
+    type: object
+  api.UpdateDeploymentRequestBody:
+    properties:
+      container_image:
+        type: string
+      max_instances:
+        example: "0"
+        type: string
+      min_instances:
+        example: "0"
+        type: string
+      port:
+        example: "0"
+        type: string
     type: object
   models.Deployment:
     properties:
@@ -68,6 +85,8 @@ definitions:
         type: integer
       name:
         type: string
+      port:
+        type: integer
       updated_at:
         type: string
       url:
@@ -180,10 +199,11 @@ paths:
       summary: List deployments
       tags:
       - deployments
-    put:
+    post:
       consumes:
       - application/json
-      description: Deploy a container image to Cloud Run
+      description: Queue creation of a deployment in Cloud Run and return a provisioning
+        job ID
       parameters:
       - description: Deployment details
         in: body
@@ -194,8 +214,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: Deployment successful with service URL
+        "202":
+          description: Provisioning job accepted
           schema:
             additionalProperties:
               type: string
@@ -212,14 +232,14 @@ paths:
             additionalProperties:
               type: string
             type: object
-        "408":
-          description: Deployment cancelled by client
+        "409":
+          description: Deployment already exists
           schema:
             additionalProperties:
               type: string
             type: object
         "500":
-          description: Deployment failed
+          description: Failed to queue deployment
           schema:
             additionalProperties:
               type: string
@@ -320,6 +340,61 @@ paths:
       summary: Get deployment by name
       tags:
       - deployments
+    patch:
+      consumes:
+      - application/json
+      description: Queue an update for an existing deployment. Omitted fields keep
+        their current values.
+      parameters:
+      - description: Deployment name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Deployment fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.UpdateDeploymentRequestBody'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Provisioning job accepted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Invalid request body or missing deployment name
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Deployment not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Failed to queue update
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update deployment by name
+      tags:
+      - deployments
   /health:
     get:
       description: Check the health status of the API and database connection
@@ -340,15 +415,15 @@ paths:
       summary: Health check
       tags:
       - health
-  /provisioning-jobs/{deployment_id}/status:
+  /provisioning-jobs/{job_id}/status:
     get:
-      description: Streams provisioning status updates for a deployment using Server-Sent
+      description: Streams provisioning status updates for a resource using Server-Sent
         Events (SSE). Events are emitted until status becomes succeeded or failed,
         or the client disconnects.
       parameters:
-      - description: Deployment ID
+      - description: Job ID
         in: path
-        name: deployment_id
+        name: job_id
         required: true
         type: string
       produces:
@@ -359,13 +434,13 @@ paths:
           schema:
             type: string
         "400":
-          description: deployment_id is required
+          description: job_id is required
           schema:
             additionalProperties:
               type: string
             type: object
         "404":
-          description: provisioning job not found for deployment_id
+          description: provisioning job not found for job_id
           schema:
             additionalProperties:
               type: string
