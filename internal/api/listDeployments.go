@@ -94,7 +94,7 @@ func (app *App) listDeployments(c *gin.Context) {
 
 	// Get deployments with pagination
 	query := fmt.Sprintf(`
-		SELECT * FROM deployments
+		SELECT id, name, url, container_image, user_email, min_instances, max_instances, port, created_at, updated_at FROM deployments
 		%s
 		ORDER BY name ASC
 		LIMIT $%d OFFSET $%d
@@ -124,6 +124,7 @@ func (app *App) listDeployments(c *gin.Context) {
 			&deployment.UserEmail,
 			&deployment.MinInstances,
 			&deployment.MaxInstances,
+			&deployment.Port,
 			&deployment.CreatedAt,
 			&deployment.UpdatedAt,
 		)
