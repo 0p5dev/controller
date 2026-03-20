@@ -158,13 +158,13 @@
                     }
                 }
             },
-            "put": {
+            "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Deploy a container image to Cloud Run",
+                "description": "Queue creation of a deployment in Cloud Run and return a provisioning job ID",
                 "consumes": [
                     "application/json"
                 ],
@@ -187,8 +187,8 @@
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "Deployment successful with service URL",
+                    "202": {
+                        "description": "Provisioning job accepted",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -214,8 +214,8 @@
                             }
                         }
                     },
-                    "408": {
-                        "description": "Deployment cancelled by client",
+                    "409": {
+                        "description": "Deployment already exists",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -224,7 +224,7 @@
                         }
                     },
                     "500": {
-                        "description": "Deployment failed",
+                        "description": "Failed to queue deployment",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -374,6 +374,89 @@
                         }
                     }
                 }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Queue an update for an existing deployment. Omitted fields keep their current values.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deployments"
+                ],
+                "summary": "Update deployment by name",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Deployment name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Deployment fields to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.UpdateDeploymentRequestBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Provisioning job accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request body or missing deployment name",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Deployment not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to queue update",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
             }
         },
         "/health": {
@@ -401,6 +484,62 @@
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/provisioning-jobs/{job_id}/status": {
+            "get": {
+                "description": "Streams provisioning status updates for a resource using Server-Sent Events (SSE). Events are emitted until status becomes succeeded or failed, or the client disconnects.",
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "provisioning-jobs"
+                ],
+                "summary": "Stream provisioning job status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Job ID",
+                        "name": "job_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream of provisioning status updates",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "job_id is required",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "provisioning job not found for job_id",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "failed to query provisioning job status",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 }
@@ -467,16 +606,19 @@
                     "type": "string"
                 },
                 "max_instances": {
-                    "type": "integer"
+                    "type": "string",
+                    "example": "0"
                 },
                 "min_instances": {
-                    "type": "integer"
+                    "type": "string",
+                    "example": "0"
                 },
                 "name": {
                     "type": "string"
                 },
                 "port": {
-                    "type": "integer"
+                    "type": "string",
+                    "example": "0"
                 }
             }
         },
@@ -488,6 +630,26 @@
                 },
                 "min_instances": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.UpdateDeploymentRequestBody": {
+            "type": "object",
+            "properties": {
+                "container_image": {
+                    "type": "string"
+                },
+                "max_instances": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "min_instances": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "port": {
+                    "type": "string",
+                    "example": "0"
                 }
             }
         },
@@ -511,6 +673,9 @@
                 },
                 "name": {
                     "type": "string"
+                },
+                "port": {
+                    "type": "integer"
                 },
                 "updated_at": {
                     "type": "string"

@@ -15,6 +15,7 @@ type Deployment struct {
 	UserEmail      string    `json:"user_email"`
 	MinInstances   int       `json:"min_instances"`
 	MaxInstances   int       `json:"max_instances"`
+	Port           int       `json:"port"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
@@ -30,6 +31,7 @@ func MigrateDeploymentTable(pool *pgxpool.Pool) error {
 			user_email TEXT NOT NULL,
 			min_instances INT NOT NULL DEFAULT 0,
 			max_instances INT NOT NULL DEFAULT 1,
+			port INT NOT NULL DEFAULT 8080,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
