@@ -18,9 +18,9 @@ import (
 
 type UpdateDeploymentRequestBody struct {
 	ContainerImage *string `json:"container_image,omitempty"`
-	MinInstances   *int    `json:"min_instances,omitempty,string"`
-	MaxInstances   *int    `json:"max_instances,omitempty,string"`
-	Port           *int    `json:"port,omitempty,string"`
+	MinInstances   *int    `json:"min_instances,omitempty"`
+	MaxInstances   *int    `json:"max_instances,omitempty"`
+	Port           *int    `json:"port,omitempty"`
 }
 
 // @Summary Update deployment by name
