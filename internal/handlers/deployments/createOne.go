@@ -1,4 +1,4 @@
-package api
+package deployments
 
 import (
 	"context"
@@ -11,13 +11,14 @@ import (
 	iampb "cloud.google.com/go/iam/apiv1/iampb"
 	run "cloud.google.com/go/run/apiv2"
 	runpb "cloud.google.com/go/run/apiv2/runpb"
-	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
+	"github.com/0p5dev/controller/internal/sharedUtils"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-type RequestBody struct {
+type CreateOneRequestBody struct {
 	Name           string `json:"name"`
 	ContainerImage string `json:"container_image"`
 	MinInstances   *int   `json:"min_instances,omitempty,string"`
@@ -38,13 +39,14 @@ type RequestBody struct {
 // @Failure 409 {object} map[string]string "Deployment already exists"
 // @Failure 500 {object} map[string]string "Failed to queue deployment"
 // @Router /deployments [post]
-func (app *App) createDeployment(c *gin.Context) {
-	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
+func CreateOne(c *gin.Context) {
+	userClaims := c.MustGet("UserClaims").(*sharedUtils.UserClaims)
+	pool := c.MustGet("Pool").(*pgxpool.Pool)
 
 	ctx := context.Background()
 	reqCtx := c.Request.Context()
 
-	var reqBody RequestBody
+	var reqBody CreateOneRequestBody
 	if err := c.ShouldBindJSON(&reqBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "invalid request payload",
@@ -54,7 +56,7 @@ func (app *App) createDeployment(c *gin.Context) {
 	}
 
 	var existingDeployment bool
-	err := app.Pool.QueryRow(reqCtx, `SELECT EXISTS(SELECT 1 FROM deployments WHERE name=$1 AND user_email=$2)`, reqBody.Name, userClaims.Email).Scan(&existingDeployment)
+	err := pool.QueryRow(reqCtx, `SELECT EXISTS(SELECT 1 FROM deployments WHERE name=$1 AND user_email=$2)`, reqBody.Name, userClaims.Email).Scan(&existingDeployment)
 	if err != nil {
 		slog.Error("Failed to check existing deployments", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -71,12 +73,12 @@ func (app *App) createDeployment(c *gin.Context) {
 		return
 	}
 
-	hashedEmail := hashEmail(userClaims.Email)
+	hashedEmail := sharedUtils.HashEmail(userClaims.Email)
 	serviceId := fmt.Sprintf("%s-%s", reqBody.Name, hashedEmail)
 
 	// Create entry in provisioning_jobs table and return job ID to client
 	var jobId string
-	err = app.Pool.QueryRow(reqCtx, "INSERT INTO provisioning_jobs (resource_id, status) VALUES ($1, 'pending') RETURNING id", serviceId).Scan(&jobId)
+	err = pool.QueryRow(reqCtx, "INSERT INTO provisioning_jobs (resource_id, status) VALUES ($1, 'pending') RETURNING id", serviceId).Scan(&jobId)
 	if err != nil {
 		slog.Error("Failed to create provisioning job", "resource_id", serviceId, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -100,12 +102,12 @@ func (app *App) createDeployment(c *gin.Context) {
 		servicesClient, err := run.NewServicesClient(ctx)
 		if err != nil {
 			slog.Error("Failed to create Cloud Run client", "error", err.Error())
-			app.failProvisioningJob(ctx, jobId, "failed to create Cloud Run client: "+err.Error())
+			sharedUtils.FailProvisioningJob(ctx, pool, jobId, "failed to create Cloud Run client: "+err.Error())
 			return
 		}
 		defer servicesClient.Close()
 
-		effectiveMin, effectiveMax := validateMinAndMaxInstances(reqBody.MinInstances, reqBody.MaxInstances)
+		effectiveMin, effectiveMax := sharedUtils.ValidateMinAndMaxInstances(reqBody.MinInstances, reqBody.MaxInstances)
 
 		effectivePort := 8080
 		if reqBody.Port != nil {
@@ -145,7 +147,7 @@ func (app *App) createDeployment(c *gin.Context) {
 		})
 		if err != nil {
 			slog.Error("Failed to create Cloud Run service", "error", err.Error())
-			app.failProvisioningJob(ctx, jobId, "failed to construct Cloud Run service: "+err.Error())
+			sharedUtils.FailProvisioningJob(ctx, pool, jobId, "failed to construct Cloud Run service: "+err.Error())
 			deleteCloudRunServiceIfExists(ctx, servicesClient, serviceFullName)
 			return
 		}
@@ -153,7 +155,7 @@ func (app *App) createDeployment(c *gin.Context) {
 		service, err := createOp.Wait(ctx)
 		if err != nil {
 			slog.Error("Cloud Run service creation failed", "error", err.Error())
-			app.failProvisioningJob(ctx, jobId, "Cloud Run service creation failed: "+err.Error())
+			sharedUtils.FailProvisioningJob(ctx, pool, jobId, "Cloud Run service creation failed: "+err.Error())
 			deleteCloudRunServiceIfExists(ctx, servicesClient, serviceFullName)
 			return
 		}
@@ -170,24 +172,24 @@ func (app *App) createDeployment(c *gin.Context) {
 		if err := ensurePublicInvokerAccess(ctx, servicesClient, serviceFullName); err != nil {
 			slog.Error("Failed to set IAM policy", "error", err.Error())
 			// Attempt to delete the service since it's not publicly accessible and likely unusable for the user
-			app.failProvisioningJob(ctx, jobId, "failed to set IAM policy for public access: "+err.Error())
+			sharedUtils.FailProvisioningJob(ctx, pool, jobId, "failed to set IAM policy for public access: "+err.Error())
 			deleteCloudRunServiceIfExists(ctx, servicesClient, serviceFullName)
 			return
 		}
 
 		// Record deployment in database
-		_, err = app.Pool.Exec(ctx, `
+		_, err = pool.Exec(ctx, `
 				INSERT INTO deployments (id, name, url, container_image, user_email, min_instances, max_instances)
 				VALUES ($1, $2, $3, $4, $5, $6, $7)
 			`, serviceId, reqBody.Name, serviceUrl, reqBody.ContainerImage, userClaims.Email, effectiveMin, effectiveMax)
 		if err != nil {
 			slog.Error("Failed to record deployment in database", "error", err.Error())
-			app.failProvisioningJob(ctx, jobId, "failed to record deployment in database: "+err.Error())
+			sharedUtils.FailProvisioningJob(ctx, pool, jobId, "failed to record deployment in database: "+err.Error())
 			deleteCloudRunServiceIfExists(ctx, servicesClient, serviceFullName)
 			return
 		}
 
-		app.succeedProvisioningJob(ctx, jobId)
+		sharedUtils.SucceedProvisioningJob(ctx, pool, jobId)
 	}()
 }
 

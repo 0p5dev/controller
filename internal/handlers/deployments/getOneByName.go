@@ -1,4 +1,4 @@
-package api
+package deployments
 
 import (
 	"context"
@@ -12,11 +12,11 @@ import (
 	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
 	run "cloud.google.com/go/run/apiv2"
 	"cloud.google.com/go/run/apiv2/runpb"
+	"github.com/0p5dev/controller/internal/sharedUtils"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-
-	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
 )
 
 type CloudRunServiceDetails struct {
@@ -53,8 +53,9 @@ type ServiceMetrics struct {
 // @Failure 404 {object} map[string]string "Deployment not found"
 // @Failure 500 {object} map[string]string "Failed to retrieve deployment"
 // @Router /deployments/{name} [get]
-func (app *App) getDeploymentByName(c *gin.Context) {
-	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
+func GetOne(c *gin.Context) {
+	userClaims := c.MustGet("UserClaims").(*sharedUtils.UserClaims)
+	pool := c.MustGet("Pool").(*pgxpool.Pool)
 
 	deploymentName := c.Param("name")
 	if deploymentName == "" {
@@ -71,7 +72,7 @@ func (app *App) getDeploymentByName(c *gin.Context) {
 	// Verify the deployment belongs to the authenticated user
 	dbCtx := c.Request.Context()
 	var deploymentId string
-	err := app.Pool.QueryRow(dbCtx, "SELECT id FROM deployments WHERE name = $1 AND user_email = $2", deploymentName, userClaims.Email).Scan(&deploymentId)
+	err := pool.QueryRow(dbCtx, "SELECT id FROM deployments WHERE name = $1 AND user_email = $2", deploymentName, userClaims.Email).Scan(&deploymentId)
 	if err != nil {
 		slog.Error("Error finding deployment", "deployment", deploymentName, "user", userClaims.Email, "error", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{

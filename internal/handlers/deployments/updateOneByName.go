@@ -1,4 +1,4 @@
-package api
+package deployments
 
 import (
 	"context"
@@ -10,9 +10,10 @@ import (
 
 	run "cloud.google.com/go/run/apiv2"
 	runpb "cloud.google.com/go/run/apiv2/runpb"
-	"github.com/0p5dev/controller/internal/data/models"
-	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
+	"github.com/0p5dev/controller/internal/models"
+	"github.com/0p5dev/controller/internal/sharedUtils"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
@@ -37,8 +38,9 @@ type UpdateDeploymentRequestBody struct {
 // @Failure 404 {object} map[string]string "Deployment not found"
 // @Failure 500 {object} map[string]string "Failed to queue update"
 // @Router /deployments/{name} [patch]
-func (app *App) updateDeploymentByName(c *gin.Context) {
-	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
+func UpdateOneByName(c *gin.Context) {
+	userClaims := c.MustGet("UserClaims").(*sharedUtils.UserClaims)
+	pool := c.MustGet("Pool").(*pgxpool.Pool)
 
 	ctx := context.Background()
 	reqCtx := c.Request.Context()
@@ -61,7 +63,7 @@ func (app *App) updateDeploymentByName(c *gin.Context) {
 
 	// ensure deployment exists and belongs to user, return a 404 otherwise
 	var currentDeployment models.Deployment
-	err := app.Pool.QueryRow(reqCtx, "SELECT id, container_image, min_instances, max_instances, port FROM deployments WHERE name = $1 AND user_email = $2", deploymentName, userClaims.Email).Scan(
+	err := pool.QueryRow(reqCtx, "SELECT id, container_image, min_instances, max_instances, port FROM deployments WHERE name = $1 AND user_email = $2", deploymentName, userClaims.Email).Scan(
 		&currentDeployment.Id,
 		&currentDeployment.ContainerImage,
 		&currentDeployment.MinInstances,
@@ -77,7 +79,7 @@ func (app *App) updateDeploymentByName(c *gin.Context) {
 
 	// Create entry in provisioning_jobs table and return job ID to client
 	var jobId string
-	err = app.Pool.QueryRow(reqCtx, "INSERT INTO provisioning_jobs (resource_id, status) VALUES ($1, 'pending') RETURNING id", currentDeployment.Id).Scan(&jobId)
+	err = pool.QueryRow(reqCtx, "INSERT INTO provisioning_jobs (resource_id, status) VALUES ($1, 'pending') RETURNING id", currentDeployment.Id).Scan(&jobId)
 	if err != nil {
 		slog.Error("Failed to create provisioning job", "resource_id", currentDeployment.Id, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -101,7 +103,7 @@ func (app *App) updateDeploymentByName(c *gin.Context) {
 		servicesClient, err := run.NewServicesClient(ctx)
 		if err != nil {
 			slog.Error("Failed to create Cloud Run client", "error", err.Error())
-			app.failProvisioningJob(ctx, jobId, "failed to create Cloud Run client: "+err.Error())
+			sharedUtils.FailProvisioningJob(ctx, pool, jobId, "failed to create Cloud Run client: "+err.Error())
 			return
 		}
 		defer servicesClient.Close()
@@ -112,7 +114,7 @@ func (app *App) updateDeploymentByName(c *gin.Context) {
 			effectiveImage = *reqBody.ContainerImage
 		}
 
-		effectiveMin, effectiveMax := validateMinAndMaxInstances(reqBody.MinInstances, reqBody.MaxInstances)
+		effectiveMin, effectiveMax := sharedUtils.ValidateMinAndMaxInstances(reqBody.MinInstances, reqBody.MaxInstances)
 
 		effectivePort := currentDeployment.Port
 		if reqBody.Port != nil {
@@ -137,7 +139,7 @@ func (app *App) updateDeploymentByName(c *gin.Context) {
 
 		if len(maskPaths) == 0 {
 			slog.Info("No fields to update", "deployment", deploymentName)
-			app.succeedProvisioningJob(ctx, jobId)
+			sharedUtils.SucceedProvisioningJob(ctx, pool, jobId)
 			return
 		}
 
@@ -176,7 +178,7 @@ func (app *App) updateDeploymentByName(c *gin.Context) {
 
 		if err != nil {
 			slog.Error("Failed to update Cloud Run service", "service", serviceFullName, "error", err.Error())
-			app.failProvisioningJob(ctx, jobId, "failed to update Cloud Run service: "+err.Error())
+			sharedUtils.FailProvisioningJob(ctx, pool, jobId, "failed to update Cloud Run service: "+err.Error())
 			rollbackToPreviousRevision(ctx, serviceFullName, servicesClient)
 			return
 		}
@@ -184,20 +186,20 @@ func (app *App) updateDeploymentByName(c *gin.Context) {
 		_, err = updateOperation.Wait(ctx)
 		if err != nil {
 			slog.Error("Failed waiting for Cloud Run update", "service", serviceFullName, "error", err.Error())
-			app.failProvisioningJob(ctx, jobId, "failed waiting for Cloud Run update: "+err.Error())
+			sharedUtils.FailProvisioningJob(ctx, pool, jobId, "failed waiting for Cloud Run update: "+err.Error())
 			rollbackToPreviousRevision(ctx, serviceFullName, servicesClient)
 			return
 		}
 
-		_, err = app.Pool.Exec(ctx, "UPDATE deployments SET container_image = $1, min_instances = $2, max_instances = $3, port = $4, updated_at = NOW() WHERE id = $5", effectiveImage, effectiveMin, effectiveMax, effectivePort, currentDeployment.Id)
+		_, err = pool.Exec(ctx, "UPDATE deployments SET container_image = $1, min_instances = $2, max_instances = $3, port = $4, updated_at = NOW() WHERE id = $5", effectiveImage, effectiveMin, effectiveMax, effectivePort, currentDeployment.Id)
 		if err != nil {
 			slog.Error("Failed to update deployment record in database", "deployment_id", currentDeployment.Id, "error", err.Error())
-			app.failProvisioningJob(ctx, jobId, "failed to update deployment record in database: "+err.Error())
+			sharedUtils.FailProvisioningJob(ctx, pool, jobId, "failed to update deployment record in database: "+err.Error())
 			rollbackToPreviousRevision(ctx, serviceFullName, servicesClient)
 			return
 		}
 
-		app.succeedProvisioningJob(ctx, jobId)
+		sharedUtils.SucceedProvisioningJob(ctx, pool, jobId)
 	}()
 }
 

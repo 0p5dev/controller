@@ -2,22 +2,14 @@ package api
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/0p5dev/controller/internal/data"
-	"github.com/0p5dev/controller/internal/data/models"
 	"github.com/0p5dev/controller/internal/middleware"
+	"github.com/0p5dev/controller/internal/routes"
 )
-
-type App struct {
-	Pool *pgxpool.Pool
-	Hub  *Hub
-}
 
 func ensureEnvVars() error {
 	requiredVars := []string{
@@ -27,6 +19,7 @@ func ensureEnvVars() error {
 		"GCP_REGION",
 		"SERVICE_ACCOUNT_EMAIL",
 		"AR_REPO_URL",
+		"STRIPE_API_KEY",
 	}
 
 	for _, v := range requiredVars {
@@ -38,11 +31,13 @@ func ensureEnvVars() error {
 	return nil
 }
 
-func Initialize(router *gin.Engine) (*pgxpool.Pool, error) {
+func Initialize(router *gin.Engine) error {
+	// Fail fast if required environment variables are missing
 	if err := ensureEnvVars(); err != nil {
-		return nil, err
+		return err
 	}
 
+	// Configure CORS
 	corsConfig := cors.Config{
 		AllowOrigins:  []string{"*"},
 		AllowMethods:  []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -51,8 +46,10 @@ func Initialize(router *gin.Engine) (*pgxpool.Pool, error) {
 	}
 	router.Use(cors.New(corsConfig))
 
+	// Not using a proxy, so disable trusted proxy checking
 	router.SetTrustedProxies(nil)
 
+	// Recovery middleware by default and logging per environment
 	router.Use(gin.Recovery())
 	if os.Getenv("GIN_MODE") == "release" {
 		router.Use(middleware.SloggerMiddleware())
@@ -60,26 +57,13 @@ func Initialize(router *gin.Engine) (*pgxpool.Pool, error) {
 		router.Use(gin.Logger())
 	}
 
-	pool, err := data.InitializeDatabase()
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize database: %w", err)
-	}
+	// Inject neccessary dependencies into the context for handlers to use
+	router.Use(middleware.DatabaseMiddleware())
+	router.Use(middleware.HubMiddleware())
+	router.Use(middleware.StripeMiddleware())
 
-	app := &App{
-		Pool: pool,
-		Hub:  &Hub{clients: make(map[string][]chan models.ProvisioningJobUpdate)},
-	}
+	// Create API routes
+	routes.CreateRoutes(router)
 
-	go func() {
-		if err := data.ListenForProvisioningJobUpdates(func(update models.ProvisioningJobUpdate) {
-			slog.Info("Received provisioning job update", "update", update)
-			app.Hub.Broadcast(update)
-		}); err != nil {
-			slog.Error("Error listening for provisioning job updates, disconnected", "error", err)
-		}
-	}()
-
-	app.CreateRoutes(router)
-
-	return pool, nil
+	return nil
 }

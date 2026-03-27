@@ -1,4 +1,4 @@
-package api
+package containerImages
 
 import (
 	"compress/gzip"
@@ -12,8 +12,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 
-	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
+	"github.com/0p5dev/controller/internal/sharedUtils"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/google"
@@ -58,9 +59,9 @@ func getImageNameFromTarballPath(tarPath string) string {
 // @Failure 415 {object} map[string]string "Unsupported media type"
 // @Failure 500 {object} map[string]string "Failed to push image"
 // @Router /container-images [post]
-func (app *App) pushToContainerRegistry(c *gin.Context) {
-	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
-
+func PushToRegistry(c *gin.Context) {
+	userClaims := c.MustGet("UserClaims").(*sharedUtils.UserClaims)
+	pool := c.MustGet("Pool").(*pgxpool.Pool)
 	ctx := context.Background()
 
 	// Read gzip stream from request body
@@ -119,7 +120,7 @@ func (app *App) pushToContainerRegistry(c *gin.Context) {
 	}
 
 	originalImageName := getImageNameFromTarballPath(tmpTarPath)
-	hashedEmail := hashEmail(userClaims.Email)
+	hashedEmail := sharedUtils.HashEmail(userClaims.Email)
 	finalImageName := fmt.Sprintf("%s-%s", originalImageName, hashedEmail)
 
 	// Tag image for target registry
@@ -155,7 +156,7 @@ func (app *App) pushToContainerRegistry(c *gin.Context) {
 	}
 
 	// Record pushed image in database
-	_, err = app.Pool.Exec(ctx, `
+	_, err = pool.Exec(ctx, `
 			INSERT INTO container_images (fqin, user_email)
 			VALUES ($1, $2)
 		`, targetTag, userClaims.Email)

@@ -35,12 +35,13 @@ func main() {
 		ginMode = "development"
 	}
 	gin.SetMode(ginMode)
+
 	router := gin.New()
-	dbConnectionPool, err := api.Initialize(router)
+
+	err := api.Initialize(router)
 	if err != nil {
 		slog.Error("Failed to initialize application", "error", err)
 		os.Exit(1)
 	}
-	defer dbConnectionPool.Close()
 	router.Run("0.0.0.0:8080")
 }

@@ -1,4 +1,4 @@
-package api
+package provisioningJobs
 
 import (
 	"context"
@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/0p5dev/controller/internal/data/models"
+	"github.com/0p5dev/controller/internal/middleware"
+	"github.com/0p5dev/controller/internal/models"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // @Summary Stream provisioning job status
@@ -21,7 +23,11 @@ import (
 // @Failure 404 {object} map[string]string "provisioning job not found for job_id"
 // @Failure 500 {object} map[string]string "failed to query provisioning job status"
 // @Router /provisioning-jobs/{job_id}/status [get]
-func (app *App) getProvisioningJobStatus(c *gin.Context) {
+func GetStatus(c *gin.Context) {
+	ctx := c.Request.Context()
+	pool := c.MustGet("Pool").(*pgxpool.Pool)
+	hub := c.MustGet("Hub").(*middleware.Hub)
+
 	jobId := c.Param("job_id")
 	if jobId == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
@@ -31,9 +37,8 @@ func (app *App) getProvisioningJobStatus(c *gin.Context) {
 	}
 
 	// Check if row in provisioning_jobs table exists for this job
-	ctx := c.Request.Context()
 	var exists bool
-	err := app.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM provisioning_jobs WHERE id = $1 AND completed_at IS NULL)", jobId).Scan(&exists)
+	err := pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM provisioning_jobs WHERE id = $1 AND completed_at IS NULL)", jobId).Scan(&exists)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to query provisioning job status",
@@ -55,8 +60,8 @@ func (app *App) getProvisioningJobStatus(c *gin.Context) {
 
 	// Create a channel to receive provisioning job status updates
 	statusChan := make(chan models.ProvisioningJobUpdate)
-	app.Hub.registerClient(jobId, statusChan)
-	defer app.Hub.unregisterClient(jobId, statusChan)
+	hub.RegisterClient(jobId, statusChan)
+	defer hub.UnregisterClient(jobId, statusChan)
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -69,7 +74,7 @@ func (app *App) getProvisioningJobStatus(c *gin.Context) {
 
 			if statusUpdate.Status == "succeeded" {
 				serviceUrl := "URL not available"
-				err := app.Pool.QueryRow(context.Background(), "SELECT url FROM deployments WHERE id = (SELECT resource_id FROM provisioning_jobs WHERE id = $1)", jobId).Scan(&serviceUrl)
+				err := pool.QueryRow(context.Background(), "SELECT url FROM deployments WHERE id = (SELECT resource_id FROM provisioning_jobs WHERE id = $1)", jobId).Scan(&serviceUrl)
 				if err != nil {
 					slog.Error("Failed to query service URL for completed provisioning job", "job_id", jobId, "error", err.Error())
 				}

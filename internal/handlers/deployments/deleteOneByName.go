@@ -1,4 +1,4 @@
-package api
+package deployments
 
 import (
 	"context"
@@ -9,8 +9,9 @@ import (
 
 	run "cloud.google.com/go/run/apiv2"
 	runpb "cloud.google.com/go/run/apiv2/runpb"
-	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
+	"github.com/0p5dev/controller/internal/sharedUtils"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -27,9 +28,9 @@ import (
 // @Failure 404 {object} map[string]string "Deployment not found"
 // @Failure 500 {object} map[string]string "Failed to delete deployment"
 // @Router /deployments/{name} [delete]
-func (app *App) deleteDeploymentByName(c *gin.Context) {
-
-	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
+func DeleteOneByName(c *gin.Context) {
+	userClaims := c.MustGet("UserClaims").(*sharedUtils.UserClaims)
+	pool := c.MustGet("Pool").(*pgxpool.Pool)
 
 	deploymentName := c.Param("name")
 	if deploymentName == "" {
@@ -43,7 +44,7 @@ func (app *App) deleteDeploymentByName(c *gin.Context) {
 
 	// Verify the deployment belongs to the authenticated user
 	var deploymentId string
-	err := app.Pool.QueryRow(ctx, "SELECT id FROM deployments WHERE name = $1 AND user_email = $2", deploymentName, userClaims.Email).Scan(&deploymentId)
+	err := pool.QueryRow(ctx, "SELECT id FROM deployments WHERE name = $1 AND user_email = $2", deploymentName, userClaims.Email).Scan(&deploymentId)
 	if err != nil {
 		slog.Error("Error finding deployment", "deployment", deploymentName, "user", userClaims.Email, "error", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
@@ -85,7 +86,7 @@ func (app *App) deleteDeploymentByName(c *gin.Context) {
 	}
 
 	// Delete the deployment from the database
-	_, err = app.Pool.Exec(ctx, "DELETE FROM deployments WHERE id = $1", deploymentId)
+	_, err = pool.Exec(ctx, "DELETE FROM deployments WHERE id = $1", deploymentId)
 	if err != nil {
 		slog.Error("Failed to delete deployment from database", "deployment_id", deploymentId, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
