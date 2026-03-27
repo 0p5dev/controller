@@ -1,11 +1,16 @@
 package middleware
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 
+	"github.com/0p5dev/controller/internal/models"
 	"github.com/0p5dev/controller/internal/sharedUtils"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"fmt"
 	"os"
@@ -14,7 +19,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func getUserClaims(authHeader string) (*sharedUtils.UserClaims, error) {
+func getUserClaims(authHeader string, pool *pgxpool.Pool) (*sharedUtils.UserClaims, error) {
 	if authHeader == "" {
 		return nil, fmt.Errorf("authorization header required")
 	}
@@ -25,7 +30,7 @@ func getUserClaims(authHeader string) (*sharedUtils.UserClaims, error) {
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
 	jwtSecret := os.Getenv("SUPABASE_JWT_SECRET")
-	token, err := jwt.ParseWithClaims(tokenString, &sharedUtils.UserClaims{}, func(token *jwt.Token) (any, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &sharedUtils.OauthClaims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
@@ -36,46 +41,43 @@ func getUserClaims(authHeader string) (*sharedUtils.UserClaims, error) {
 		return nil, fmt.Errorf("invalid token: %v", err)
 	}
 
-	userClaims, ok := token.Claims.(*sharedUtils.UserClaims)
+	oauthClaims, ok := token.Claims.(*sharedUtils.OauthClaims)
 	if !ok || !token.Valid {
 		return nil, fmt.Errorf("invalid token claims")
 	}
 
-	userClaims.UserMetadata["stripe_customer_id"] = nil
+	var user models.User
+	err = pool.QueryRow(context.Background(), `SELECT id, email, stripe_customer_id, stripe_payment_method_id, last_billed_at, created_at, updated_at FROM users WHERE email=$1`, oauthClaims.Email).Scan(&user.Id, &user.Email, &user.StripeCustomer_Id, &user.StripePaymentMethodId, &user.LastBilledAt, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			err = pool.QueryRow(context.Background(), `
+				INSERT INTO users (email)
+				VALUES ($1)
+				RETURNING id, email, stripe_customer_id, stripe_payment_method_id, last_billed_at, created_at, updated_at
+			`, oauthClaims.Email).Scan(&user.Id, &user.Email, &user.StripeCustomer_Id, &user.StripePaymentMethodId, &user.LastBilledAt, &user.CreatedAt, &user.UpdatedAt)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create user in database: %v", err)
+			}
+			slog.Info("Created new user in database", "email", oauthClaims.Email)
+		} else {
+			return nil, fmt.Errorf("failed to fetch user from database: %v", err)
+		}
+	}
+
+	userClaims := &sharedUtils.UserClaims{
+		OauthClaims: *oauthClaims,
+		User:        user,
+	}
 
 	return userClaims, nil
 }
 
-// func getStripeCustomerID(email string) (string, error) {
-// customersList := app.StripeClient.V1Customers.List(ctx, &stripe.CustomerListParams{
-// 	Email: stripe.String(userClaims.Email),
-// })
-// var existingCustomer *stripe.Customer
-// for customer, err := range customersList {
-// 	if err != nil {
-// 		slog.Error("Failed to list Stripe customers", "error", err.Error())
-// 		c.JSON(http.StatusInternalServerError, gin.H{
-// 			"error":   "failed to list Stripe customers",
-// 			"message": err.Error(),
-// 		})
-// 		return
-// 	}
-// 	existingCustomer = customer
-// 	break
-// }
-// if existingCustomer != nil {
-// 	c.JSON(http.StatusConflict, gin.H{
-// 		"customer": existingCustomer,
-// 		"message":  "Stripe customer already exists for this user",
-// 	})
-// 	return
-// }
-// }
-
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		pool := c.MustGet("Pool").(*pgxpool.Pool)
 		authHeader := c.GetHeader("Authorization")
-		userClaims, err := getUserClaims(authHeader)
+
+		userClaims, err := getUserClaims(authHeader, pool)
 		if err != nil {
 			slog.Error("Failed to authenticate user", "error", err.Error())
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
@@ -83,7 +85,9 @@ func AuthMiddleware() gin.HandlerFunc {
 			})
 			return
 		}
-		slog.Info("Authenticated user", "claims", userClaims)
+
+		// slog.Info("Authenticated user", "claims", userClaims)
+
 		c.Set("UserClaims", userClaims)
 		c.Next()
 	}

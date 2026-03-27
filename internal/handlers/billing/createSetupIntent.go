@@ -10,12 +10,12 @@ import (
 )
 
 func CreateSetupIntent(c *gin.Context) {
-	userClaims := c.MustGet("userClaims").(*sharedUtils.UserClaims)
+	userClaims := c.MustGet("UserClaims").(*sharedUtils.UserClaims)
 	stripeClient := c.MustGet("StripeClient").(*stripe.Client)
 	ctx := c.Request.Context()
 
 	customersList := stripeClient.V1Customers.List(ctx, &stripe.CustomerListParams{
-		Email: stripe.String(userClaims.Email),
+		Email: stripe.String(userClaims.User.Email),
 	})
 	var existingCustomer *stripe.Customer
 	for customer, err := range customersList {
@@ -45,14 +45,15 @@ func CreateSetupIntent(c *gin.Context) {
 		},
 	})
 	if err != nil {
+		slog.Error("Failed to create Stripe setup intent", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "failed to create setup intent",
+			"error":   "failed to create Stripe setup intent",
 			"message": err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"seti": setupIntent.ClientSecret,
+		"setup_intent": setupIntent.ClientSecret,
 	})
 }

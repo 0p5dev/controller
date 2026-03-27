@@ -14,7 +14,7 @@ A REST API for managing Cloud Run deployments and container images with integrat
 
 ## Tech Stack
 
-- **Language**: Go 1.25.3
+- **Language**: Go 1.26.1
 - **Framework**: Gin (HTTP web framework)
 - **Database**: PostgreSQL with pgx driver
 - **Cloud**: Google Cloud Platform (Cloud Run, Artifact Registry, Secret Manager, Monitoring)
@@ -24,7 +24,7 @@ A REST API for managing Cloud Run deployments and container images with integrat
 
 ## Prerequisites
 
-- [Go 1.25+](https://go.dev/doc/install)
+- [Go 1.26+](https://go.dev/doc/install)
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
 - [Just](https://github.com/casey/just#installation) - Command runner (like Make but better)
 - [Air](https://github.com/cosmtrek/air) - Live reload for Go apps (optional but recommended)
@@ -207,7 +207,7 @@ The application automatically creates the following tables on startup:
 - `name` (TEXT)
 - `url` (TEXT)
 - `container_image` (TEXT, FK to container_images)
-- `user_email` (TEXT)
+- `user_id` (TEXT)
 - `min_instances` (INT, DEFAULT 0)
 - `max_instances` (INT, DEFAULT 1)
 - `created_at` (TIMESTAMPTZ)

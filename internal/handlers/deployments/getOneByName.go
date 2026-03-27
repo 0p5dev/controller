@@ -72,9 +72,9 @@ func GetOne(c *gin.Context) {
 	// Verify the deployment belongs to the authenticated user
 	dbCtx := c.Request.Context()
 	var deploymentId string
-	err := pool.QueryRow(dbCtx, "SELECT id FROM deployments WHERE name = $1 AND user_email = $2", deploymentName, userClaims.Email).Scan(&deploymentId)
+	err := pool.QueryRow(dbCtx, "SELECT id FROM deployments WHERE name = $1 AND user_id = $2", deploymentName, userClaims.User.Id).Scan(&deploymentId)
 	if err != nil {
-		slog.Error("Error finding deployment", "deployment", deploymentName, "user", userClaims.Email, "error", err)
+		slog.Error("Error finding deployment", "deployment", deploymentName, "user_id", userClaims.User.Id, "user_email", userClaims.User.Email, "error", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "deployment not found",
 		})

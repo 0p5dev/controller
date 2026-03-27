@@ -14,6 +14,7 @@ import (
 	deploymentsHandler "github.com/0p5dev/controller/internal/handlers/deployments"
 	healthHandler "github.com/0p5dev/controller/internal/handlers/health"
 	provisioningJobsHandler "github.com/0p5dev/controller/internal/handlers/provisioningJobs"
+	usersHandler "github.com/0p5dev/controller/internal/handlers/users"
 )
 
 func CreateRoutes(router *gin.Engine) {
@@ -47,4 +48,8 @@ func CreateRoutes(router *gin.Engine) {
 	billing.Use(middleware.AuthMiddleware())
 	billing.POST("/customer", billingHandler.CreateCustomer)
 	billing.POST("/setup-intent", billingHandler.CreateSetupIntent)
+
+	users := apiv1.Group("/users")
+	users.Use(middleware.AuthMiddleware())
+	users.POST("", usersHandler.CreateOne)
 }

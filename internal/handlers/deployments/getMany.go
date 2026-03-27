@@ -65,8 +65,8 @@ func GetMany(c *gin.Context) {
 	argIndex := 1
 
 	// Always filter by authenticated user's deployments (users can only see their own)
-	whereConditions = append(whereConditions, fmt.Sprintf("user_email = $%d", argIndex))
-	args = append(args, userClaims.Email)
+	whereConditions = append(whereConditions, fmt.Sprintf("user_id = $%d", argIndex))
+	args = append(args, userClaims.User.Id)
 	argIndex++
 
 	// Add search filter (searches across name, url, and container_image)
@@ -96,7 +96,7 @@ func GetMany(c *gin.Context) {
 
 	// Get deployments with pagination
 	query := fmt.Sprintf(`
-		SELECT id, name, url, container_image, user_email, min_instances, max_instances, port, created_at, updated_at FROM deployments
+		SELECT id, name, url, container_image, user_id, min_instances, max_instances, port, created_at, updated_at FROM deployments
 		%s
 		ORDER BY name ASC
 		LIMIT $%d OFFSET $%d
@@ -123,7 +123,7 @@ func GetMany(c *gin.Context) {
 			&deployment.Name,
 			&deployment.Url,
 			&deployment.ContainerImage,
-			&deployment.UserEmail,
+			&deployment.UserId,
 			&deployment.MinInstances,
 			&deployment.MaxInstances,
 			&deployment.Port,

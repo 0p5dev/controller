@@ -120,8 +120,7 @@ func PushToRegistry(c *gin.Context) {
 	}
 
 	originalImageName := getImageNameFromTarballPath(tmpTarPath)
-	hashedEmail := sharedUtils.HashEmail(userClaims.Email)
-	finalImageName := fmt.Sprintf("%s-%s", originalImageName, hashedEmail)
+	finalImageName := fmt.Sprintf("%s-%s", originalImageName, userClaims.User.Id)
 
 	// Tag image for target registry
 	arRepoUrl := os.Getenv("AR_REPO_URL")
@@ -138,7 +137,7 @@ func PushToRegistry(c *gin.Context) {
 
 	imageRef, err := name.ParseReference(targetTag)
 	if err != nil {
-		slog.Error("Failed to parse source reference", "error", err)
+		slog.Error("Failed to parse source reference", "user_id", userClaims.User.Id, "user_email", userClaims.User.Email, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to parse source reference: %v", err),
 		})
@@ -157,11 +156,11 @@ func PushToRegistry(c *gin.Context) {
 
 	// Record pushed image in database
 	_, err = pool.Exec(ctx, `
-			INSERT INTO container_images (fqin, user_email)
+			INSERT INTO container_images (fqin, user_id)
 			VALUES ($1, $2)
-		`, targetTag, userClaims.Email)
+		`, targetTag, userClaims.User.Id)
 	if err != nil {
-		slog.Error("DB insert error", "error", err)
+		slog.Error("DB insert error", "user_id", userClaims.User.Id, "user_email", userClaims.User.Email, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to record image in database: %v", err),
 		})

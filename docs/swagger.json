@@ -1,700 +1,662 @@
 {
-    "swagger": "2.0",
-    "info": {
-        "description": "A REST API for managing Cloud Run deployments and container images",
-        "title": "0p5dev Controller API",
-        "termsOfService": "http://swagger.io/terms/",
-        "contact": {
-            "name": "API Support",
-            "url": "http://www.swagger.io/support",
-            "email": "support@swagger.io"
-        },
-        "license": {
-            "name": "MIT",
-            "url": "https://opensource.org/licenses/MIT"
-        },
-        "version": "1.0"
+  "swagger": "2.0",
+  "info": {
+    "description": "A REST API for managing Cloud Run deployments and container images",
+    "title": "0p5dev Controller API",
+    "termsOfService": "http://swagger.io/terms/",
+    "contact": {
+      "name": "API Support",
+      "url": "http://www.swagger.io/support",
+      "email": "support@swagger.io"
     },
-    "host": "localhost:8080",
-    "basePath": "/api/v1",
-    "paths": {
-        "/container-images": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Upload a gzipped docker save tarball and push it to Google Artifact Registry",
-                "consumes": [
-                    "application/gzip"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "container-images"
-                ],
-                "summary": "Push container image to registry",
-                "parameters": [
-                    {
-                        "description": "Gzipped container image tarball",
-                        "name": "image",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Image pushed successfully with FQIN",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "415": {
-                        "description": "Unsupported media type",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to push image",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/deployments": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get a paginated list of deployments for the authenticated user",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "deployments"
-                ],
-                "summary": "List deployments",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Page number (default: 1)",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Items per page (default: 10, max: 100)",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Search in name, url, and container_image",
-                        "name": "search",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Paginated list of deployments",
-                        "schema": {
-                            "$ref": "#/definitions/api.PaginatedDeploymentsResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to retrieve deployments",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Queue creation of a deployment in Cloud Run and return a provisioning job ID",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "deployments"
-                ],
-                "summary": "Create a new deployment",
-                "parameters": [
-                    {
-                        "description": "Deployment details",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.RequestBody"
-                        }
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Provisioning job accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request payload",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "409": {
-                        "description": "Deployment already exists",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to queue deployment",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/deployments/{name}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieve detailed information about a specific deployment",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "deployments"
-                ],
-                "summary": "Get deployment by name",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Deployment name",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Deployment details",
-                        "schema": {
-                            "$ref": "#/definitions/api.CloudRunServiceDetails"
-                        }
-                    },
-                    "400": {
-                        "description": "Deployment name is required",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Deployment not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to retrieve deployment",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Delete a Cloud Run deployment and remove it from the database",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "deployments"
-                ],
-                "summary": "Delete a deployment",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Deployment name",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Deployment deleted successfully",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Deployment name is required",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Deployment not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to delete deployment",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Queue an update for an existing deployment. Omitted fields keep their current values.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "deployments"
-                ],
-                "summary": "Update deployment by name",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Deployment name",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Deployment fields to update",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.UpdateDeploymentRequestBody"
-                        }
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Provisioning job accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request body or missing deployment name",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Deployment not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to queue update",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/health": {
-            "get": {
-                "description": "Check the health status of the API and database connection",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "health"
-                ],
-                "summary": "Health check",
-                "responses": {
-                    "200": {
-                        "description": "Service is healthy",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Service or database is unhealthy",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/provisioning-jobs/{job_id}/status": {
-            "get": {
-                "description": "Streams provisioning status updates for a resource using Server-Sent Events (SSE). Events are emitted until status becomes succeeded or failed, or the client disconnects.",
-                "produces": [
-                    "text/event-stream"
-                ],
-                "tags": [
-                    "provisioning-jobs"
-                ],
-                "summary": "Stream provisioning job status",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Job ID",
-                        "name": "job_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "SSE stream of provisioning status updates",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "400": {
-                        "description": "job_id is required",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "provisioning job not found for job_id",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "failed to query provisioning job status",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
     },
-    "definitions": {
-        "api.CloudRunServiceDetails": {
-            "type": "object",
-            "properties": {
-                "created_time": {
-                    "type": "string"
-                },
-                "image": {
-                    "type": "string"
-                },
-                "location": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "scaling": {
-                    "$ref": "#/definitions/api.ServiceScaling"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "updated_time": {
-                    "type": "string"
-                },
-                "url": {
-                    "type": "string"
-                }
+    "version": "1.0"
+  },
+  "host": "localhost:8080",
+  "basePath": "/api/v1",
+  "paths": {
+    "/container-images": {
+      "post": {
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "description": "Upload a gzipped docker save tarball and push it to Google Artifact Registry",
+        "consumes": ["application/gzip"],
+        "produces": ["application/json"],
+        "tags": ["container-images"],
+        "summary": "Push container image to registry",
+        "parameters": [
+          {
+            "description": "Gzipped container image tarball",
+            "name": "image",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
-        },
-        "api.PaginatedDeploymentsResponse": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "deployments": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.Deployment"
-                    }
-                },
-                "limit": {
-                    "type": "integer"
-                },
-                "page": {
-                    "type": "integer"
-                },
-                "total_pages": {
-                    "type": "integer"
-                }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image pushed successfully with FQIN",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
             }
-        },
-        "api.RequestBody": {
-            "type": "object",
-            "properties": {
-                "container_image": {
-                    "type": "string"
-                },
-                "max_instances": {
-                    "type": "string",
-                    "example": "0"
-                },
-                "min_instances": {
-                    "type": "string",
-                    "example": "0"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "port": {
-                    "type": "string",
-                    "example": "0"
-                }
+          },
+          "400": {
+            "description": "Invalid request",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
             }
-        },
-        "api.ServiceScaling": {
-            "type": "object",
-            "properties": {
-                "max_instances": {
-                    "type": "integer"
-                },
-                "min_instances": {
-                    "type": "integer"
-                }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
             }
-        },
-        "api.UpdateDeploymentRequestBody": {
-            "type": "object",
-            "properties": {
-                "container_image": {
-                    "type": "string"
-                },
-                "max_instances": {
-                    "type": "string",
-                    "example": "0"
-                },
-                "min_instances": {
-                    "type": "string",
-                    "example": "0"
-                },
-                "port": {
-                    "type": "string",
-                    "example": "0"
-                }
+          },
+          "415": {
+            "description": "Unsupported media type",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
             }
-        },
-        "models.Deployment": {
-            "type": "object",
-            "properties": {
-                "container_image": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "max_instances": {
-                    "type": "integer"
-                },
-                "min_instances": {
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "port": {
-                    "type": "integer"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "url": {
-                    "type": "string"
-                },
-                "user_email": {
-                    "type": "string"
-                }
+          },
+          "500": {
+            "description": "Failed to push image",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
             }
+          }
         }
+      }
     },
-    "securityDefinitions": {
-        "BearerAuth": {
-            "description": "Bearer JWT token in the format: Bearer \u003ctoken\u003e",
-            "type": "apiKey",
-            "name": "Authorization",
-            "in": "header"
+    "/deployments": {
+      "get": {
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "description": "Get a paginated list of deployments for the authenticated user",
+        "produces": ["application/json"],
+        "tags": ["deployments"],
+        "summary": "List deployments",
+        "parameters": [
+          {
+            "type": "integer",
+            "description": "Page number (default: 1)",
+            "name": "page",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "description": "Items per page (default: 10, max: 100)",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "type": "string",
+            "description": "Search in name, url, and container_image",
+            "name": "search",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of deployments",
+            "schema": {
+              "$ref": "#/definitions/api.PaginatedDeploymentsResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to retrieve deployments",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
         }
+      },
+      "post": {
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "description": "Queue creation of a deployment in Cloud Run and return a provisioning job ID",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "tags": ["deployments"],
+        "summary": "Create a new deployment",
+        "parameters": [
+          {
+            "description": "Deployment details",
+            "name": "request",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/api.RequestBody"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Provisioning job accepted",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request payload",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "409": {
+            "description": "Deployment already exists",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to queue deployment",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/deployments/{name}": {
+      "get": {
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "description": "Retrieve detailed information about a specific deployment",
+        "produces": ["application/json"],
+        "tags": ["deployments"],
+        "summary": "Get deployment by name",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Deployment name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deployment details",
+            "schema": {
+              "$ref": "#/definitions/api.CloudRunServiceDetails"
+            }
+          },
+          "400": {
+            "description": "Deployment name is required",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment not found",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to retrieve deployment",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "description": "Delete a Cloud Run deployment and remove it from the database",
+        "produces": ["application/json"],
+        "tags": ["deployments"],
+        "summary": "Delete a deployment",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Deployment name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deployment deleted successfully",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "400": {
+            "description": "Deployment name is required",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment not found",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to delete deployment",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "description": "Queue an update for an existing deployment. Omitted fields keep their current values.",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "tags": ["deployments"],
+        "summary": "Update deployment by name",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Deployment name",
+            "name": "name",
+            "in": "path",
+            "required": true
+          },
+          {
+            "description": "Deployment fields to update",
+            "name": "request",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/api.UpdateDeploymentRequestBody"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Provisioning job accepted",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body or missing deployment name",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment not found",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to queue update",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Check the health status of the API and database connection",
+        "produces": ["application/json"],
+        "tags": ["health"],
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "500": {
+            "description": "Service or database is unhealthy",
+            "schema": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      }
+    },
+    "/provisioning-jobs/{job_id}/status": {
+      "get": {
+        "description": "Streams provisioning status updates for a resource using Server-Sent Events (SSE). Events are emitted until status becomes succeeded or failed, or the client disconnects.",
+        "produces": ["text/event-stream"],
+        "tags": ["provisioning-jobs"],
+        "summary": "Stream provisioning job status",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Job ID",
+            "name": "job_id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SSE stream of provisioning status updates",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "400": {
+            "description": "job_id is required",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "404": {
+            "description": "provisioning job not found for job_id",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "500": {
+            "description": "failed to query provisioning job status",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
     }
+  },
+  "definitions": {
+    "api.CloudRunServiceDetails": {
+      "type": "object",
+      "properties": {
+        "created_time": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "scaling": {
+          "$ref": "#/definitions/api.ServiceScaling"
+        },
+        "status": {
+          "type": "string"
+        },
+        "updated_time": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
+    "api.PaginatedDeploymentsResponse": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer"
+        },
+        "deployments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/models.Deployment"
+          }
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "page": {
+          "type": "integer"
+        },
+        "total_pages": {
+          "type": "integer"
+        }
+      }
+    },
+    "api.RequestBody": {
+      "type": "object",
+      "properties": {
+        "container_image": {
+          "type": "string"
+        },
+        "max_instances": {
+          "type": "string",
+          "example": "0"
+        },
+        "min_instances": {
+          "type": "string",
+          "example": "0"
+        },
+        "name": {
+          "type": "string"
+        },
+        "port": {
+          "type": "string",
+          "example": "0"
+        }
+      }
+    },
+    "api.ServiceScaling": {
+      "type": "object",
+      "properties": {
+        "max_instances": {
+          "type": "integer"
+        },
+        "min_instances": {
+          "type": "integer"
+        }
+      }
+    },
+    "api.UpdateDeploymentRequestBody": {
+      "type": "object",
+      "properties": {
+        "container_image": {
+          "type": "string"
+        },
+        "max_instances": {
+          "type": "string",
+          "example": "0"
+        },
+        "min_instances": {
+          "type": "string",
+          "example": "0"
+        },
+        "port": {
+          "type": "string",
+          "example": "0"
+        }
+      }
+    },
+    "models.Deployment": {
+      "type": "object",
+      "properties": {
+        "container_image": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "max_instances": {
+          "type": "integer"
+        },
+        "min_instances": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "updated_at": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "user_id": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "BearerAuth": {
+      "description": "Bearer JWT token in the format: Bearer \u003ctoken\u003e",
+      "type": "apiKey",
+      "name": "Authorization",
+      "in": "header"
+    }
+  }
 }
