@@ -1,16 +1,13 @@
 package middleware
 
 import (
-	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 
-	"github.com/0p5dev/controller/internal/models"
 	"github.com/0p5dev/controller/internal/sharedUtils"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stripe/stripe-go/v84"
 
 	"fmt"
 	"os"
@@ -19,7 +16,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func getUserClaims(authHeader string, pool *pgxpool.Pool) (*sharedUtils.UserClaims, error) {
+func getUserClaims(authHeader string, pool *pgxpool.Pool, stripeClient *stripe.Client) (*sharedUtils.UserClaims, error) {
 	if authHeader == "" {
 		return nil, fmt.Errorf("authorization header required")
 	}
@@ -46,23 +43,28 @@ func getUserClaims(authHeader string, pool *pgxpool.Pool) (*sharedUtils.UserClai
 		return nil, fmt.Errorf("invalid token claims")
 	}
 
-	var user models.User
-	err = pool.QueryRow(context.Background(), `SELECT id, email, stripe_customer_id, stripe_payment_method_id, last_billed_at, created_at, updated_at FROM users WHERE email=$1`, oauthClaims.Email).Scan(&user.Id, &user.Email, &user.StripeCustomer_Id, &user.StripePaymentMethodId, &user.LastBilledAt, &user.CreatedAt, &user.UpdatedAt)
+	user, err := sharedUtils.GetOrCreateUser(pool, *oauthClaims, stripeClient)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			err = pool.QueryRow(context.Background(), `
-				INSERT INTO users (email)
-				VALUES ($1)
-				RETURNING id, email, stripe_customer_id, stripe_payment_method_id, last_billed_at, created_at, updated_at
-			`, oauthClaims.Email).Scan(&user.Id, &user.Email, &user.StripeCustomer_Id, &user.StripePaymentMethodId, &user.LastBilledAt, &user.CreatedAt, &user.UpdatedAt)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create user in database: %v", err)
-			}
-			slog.Info("Created new user in database", "email", oauthClaims.Email)
-		} else {
-			return nil, fmt.Errorf("failed to fetch user from database: %v", err)
-		}
+		return nil, fmt.Errorf("failed to get or create user: %v", err)
 	}
+
+	// var user models.User
+	// err = pool.QueryRow(context.Background(), `SELECT id, email, stripe_customer_id, stripe_payment_method_id, last_billed_at, created_at, updated_at FROM users WHERE email=$1`, oauthClaims.Email).Scan(&user.Id, &user.Email, &user.StripeCustomer_Id, &user.StripePaymentMethodId, &user.LastBilledAt, &user.CreatedAt, &user.UpdatedAt)
+	// if err != nil {
+	// 	if errors.Is(err, pgx.ErrNoRows) {
+	// 		err = pool.QueryRow(context.Background(), `
+	// 			INSERT INTO users (email)
+	// 			VALUES ($1)
+	// 			RETURNING id, email, stripe_customer_id, stripe_payment_method_id, last_billed_at, created_at, updated_at
+	// 		`, oauthClaims.Email).Scan(&user.Id, &user.Email, &user.StripeCustomer_Id, &user.StripePaymentMethodId, &user.LastBilledAt, &user.CreatedAt, &user.UpdatedAt)
+	// 		if err != nil {
+	// 			return nil, fmt.Errorf("failed to create user in database: %v", err)
+	// 		}
+	// 		slog.Info("Created new user in database", "email", oauthClaims.Email)
+	// 	} else {
+	// 		return nil, fmt.Errorf("failed to fetch user from database: %v", err)
+	// 	}
+	// }
 
 	userClaims := &sharedUtils.UserClaims{
 		OauthClaims: *oauthClaims,
@@ -75,9 +77,10 @@ func getUserClaims(authHeader string, pool *pgxpool.Pool) (*sharedUtils.UserClai
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		pool := c.MustGet("Pool").(*pgxpool.Pool)
+		stripeClient := c.MustGet("StripeClient").(*stripe.Client)
 		authHeader := c.GetHeader("Authorization")
 
-		userClaims, err := getUserClaims(authHeader, pool)
+		userClaims, err := getUserClaims(authHeader, pool, stripeClient)
 		if err != nil {
 			slog.Error("Failed to authenticate user", "error", err.Error())
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{

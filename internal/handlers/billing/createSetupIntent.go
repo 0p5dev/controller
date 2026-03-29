@@ -43,6 +43,7 @@ func CreateSetupIntent(c *gin.Context) {
 		PaymentMethodTypes: []*string{
 			stripe.String("card"),
 		},
+		Usage: stripe.String(string(stripe.SetupIntentUsageOffSession)),
 	})
 	if err != nil {
 		slog.Error("Failed to create Stripe setup intent", "error", err.Error())
