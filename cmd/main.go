@@ -1,12 +1,20 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/0p5dev/controller/internal/api"
+	"github.com/0p5dev/controller/internal/middleware"
+	billingService "github.com/0p5dev/controller/internal/services/billing"
 )
 
 // @title           0p5dev Controller API
@@ -43,5 +51,35 @@ func main() {
 		slog.Error("Failed to initialize application", "error", err)
 		os.Exit(1)
 	}
-	router.Run("0.0.0.0:8080")
+
+	server := &http.Server{
+		Addr:    "0.0.0.0:8080",
+		Handler: router,
+	}
+
+	go func() {
+		err := server.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("Failed to run HTTP server", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	shutdownSignal := make(chan os.Signal, 1)
+	signal.Notify(shutdownSignal, syscall.SIGINT, syscall.SIGTERM)
+	<-shutdownSignal
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		slog.Error("Failed to shutdown HTTP server gracefully", "error", err)
+	}
+
+	if err := billingService.StopRecurringBillingWorker(shutdownCtx); err != nil {
+		slog.Error("Failed to stop recurring billing worker gracefully", "error", err)
+	}
+
+	middleware.CloseDatabasePool()
+	slog.Info("Application shutdown complete")
 }

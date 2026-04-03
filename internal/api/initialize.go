@@ -20,6 +20,7 @@ func ensureEnvVars() error {
 		"SERVICE_ACCOUNT_EMAIL",
 		"AR_REPO_URL",
 		"STRIPE_API_KEY",
+		"STRIPE_WEBHOOK_SIGNING_SECRET",
 	}
 
 	for _, v := range requiredVars {
