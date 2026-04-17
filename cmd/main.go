@@ -14,7 +14,6 @@ import (
 
 	"github.com/0p5dev/controller/internal/api"
 	"github.com/0p5dev/controller/internal/middleware"
-	billingService "github.com/0p5dev/controller/internal/services/billing"
 )
 
 // @title           0p5dev Controller API
@@ -74,10 +73,6 @@ func main() {
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		slog.Error("Failed to shutdown HTTP server gracefully", "error", err)
-	}
-
-	if err := billingService.StopRecurringBillingWorker(shutdownCtx); err != nil {
-		slog.Error("Failed to stop recurring billing worker gracefully", "error", err)
 	}
 
 	middleware.CloseDatabasePool()

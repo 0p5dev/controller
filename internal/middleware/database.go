@@ -5,12 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/0p5dev/controller/internal/models"
-	billingService "github.com/0p5dev/controller/internal/services/billing"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -54,18 +52,6 @@ func DatabaseMiddleware() gin.HandlerFunc {
 		}
 	}
 
-	if isRecurringBillingEnabled() {
-		if err := billingService.StartRecurringBillingWorker(pool, os.Getenv("STRIPE_API_KEY")); err != nil {
-			closePool(pool)
-			slog.Error("failed to start recurring billing worker", "error", err)
-			return func(c *gin.Context) {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal server error: failed to start recurring billing worker"})
-			}
-		}
-	} else {
-		slog.Info("Recurring billing worker disabled", "env", "RECURRING_BILLING_ENABLED")
-	}
-
 	databasePoolMu.Lock()
 	databasePool = pool
 	databasePoolMu.Unlock()
@@ -82,25 +68,6 @@ func CloseDatabasePool() {
 	databasePool = nil
 	databasePoolMu.Unlock()
 
-	closePool(pool)
-}
-
-func isRecurringBillingEnabled() bool {
-	value := os.Getenv("RECURRING_BILLING_ENABLED")
-	if value == "" {
-		return true
-	}
-
-	enabled, err := strconv.ParseBool(value)
-	if err != nil {
-		slog.Warn("Invalid RECURRING_BILLING_ENABLED value, defaulting to true", "value", value, "error", err)
-		return true
-	}
-
-	return enabled
-}
-
-func closePool(pool *pgxpool.Pool) {
 	if pool != nil {
 		pool.Close()
 	}

@@ -44,6 +44,7 @@ func CreateRoutes(router *gin.Engine) {
 	deployments.POST("", deploymentsHandler.CreateOne)
 
 	billing := apiv1.Group("/billing")
+	billing.GET("/payment-method", middleware.AuthMiddleware(), billingHandler.GetUserPaymentMethod)
 	billing.POST("/setup-intent", middleware.AuthMiddleware(), billingHandler.CreateSetupIntent)
 	billing.POST("/webhook", billingHandler.Webhook)
 }
