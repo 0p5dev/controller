@@ -115,7 +115,7 @@ func GetMany(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var deployments []models.Deployment
+	deployments := []models.Deployment{}
 	for rows.Next() {
 		var deployment models.Deployment
 		err := rows.Scan(

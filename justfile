@@ -47,3 +47,6 @@ add PACKAGE:
 
 swagger:
     go run github.com/swaggo/swag/cmd/swag@latest init --dir ./cmd,./internal/api --parseDependency --parseInternal
+
+listen-webhook:
+    stripe listen --forward-to localhost:8080/api/v1/billing/webhook
