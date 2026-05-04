@@ -8,15 +8,11 @@ import (
 	"os"
 	"time"
 
-	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
-	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
 	run "cloud.google.com/go/run/apiv2"
 	"cloud.google.com/go/run/apiv2/runpb"
 	"github.com/0p5dev/controller/internal/sharedUtils"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type CloudRunServiceDetails struct {
@@ -72,9 +68,9 @@ func GetOne(c *gin.Context) {
 	// Verify the deployment belongs to the authenticated user
 	dbCtx := c.Request.Context()
 	var deploymentId string
-	err := pool.QueryRow(dbCtx, "SELECT id FROM deployments WHERE name = $1 AND user_id = $2", deploymentName, userClaims.User.Id).Scan(&deploymentId)
+	err := pool.QueryRow(dbCtx, "SELECT id FROM deployments WHERE name = $1 AND user_id = $2", deploymentName, userClaims.UserMetadata.AppUser.Id).Scan(&deploymentId)
 	if err != nil {
-		slog.Error("Error finding deployment", "deployment", deploymentName, "user_id", userClaims.User.Id, "user_email", userClaims.User.Email, "error", err)
+		slog.Error("Error finding deployment", "deployment", deploymentName, "user_id", userClaims.UserMetadata.AppUser.Id, "user_email", userClaims.UserMetadata.AppUser.Email, "error", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "deployment not found",
 		})
@@ -174,141 +170,141 @@ func GetOne(c *gin.Context) {
 	c.JSON(http.StatusOK, details)
 }
 
-func getServiceMetrics(ctx context.Context, projectID, location, serviceName string) (ServiceMetrics, error) {
-	// Create monitoring client
-	monitoringClient, err := monitoring.NewMetricClient(ctx)
-	if err != nil {
-		return ServiceMetrics{}, fmt.Errorf("failed to create monitoring client: %w", err)
-	}
-	defer monitoringClient.Close()
+// func getServiceMetrics(ctx context.Context, projectID, location, serviceName string) (ServiceMetrics, error) {
+// 	// Create monitoring client
+// 	monitoringClient, err := monitoring.NewMetricClient(ctx)
+// 	if err != nil {
+// 		return ServiceMetrics{}, fmt.Errorf("failed to create monitoring client: %w", err)
+// 	}
+// 	defer monitoringClient.Close()
 
-	// Set time range for metrics (last 24 hours)
-	now := time.Now()
-	endTime := timestamppb.New(now)
-	startTime := timestamppb.New(now.Add(-24 * time.Hour))
+// 	// Set time range for metrics (last 24 hours)
+// 	now := time.Now()
+// 	endTime := timestamppb.New(now)
+// 	startTime := timestamppb.New(now.Add(-24 * time.Hour))
 
-	// Get request count metrics with 1-hour alignment
-	requestsPerHour, err := getHourlyRequests(ctx, monitoringClient, projectID, location, serviceName, startTime, endTime)
-	if err != nil {
-		slog.Warn("Failed to get hourly request metrics", "error", err)
-		requestsPerHour = [24]int{}
-	}
+// 	// Get request count metrics with 1-hour alignment
+// 	requestsPerHour, err := getHourlyRequests(ctx, monitoringClient, projectID, location, serviceName, startTime, endTime)
+// 	if err != nil {
+// 		slog.Warn("Failed to get hourly request metrics", "error", err)
+// 		requestsPerHour = [24]int{}
+// 	}
 
-	// Get CPU utilization metrics with 1-hour alignment
-	cpuPerHour, err := getHourlyCPU(ctx, monitoringClient, projectID, location, serviceName, startTime, endTime)
-	if err != nil {
-		slog.Warn("Failed to get hourly CPU metrics", "error", err)
-		cpuPerHour = [24]int{}
-	}
+// 	// Get CPU utilization metrics with 1-hour alignment
+// 	cpuPerHour, err := getHourlyCPU(ctx, monitoringClient, projectID, location, serviceName, startTime, endTime)
+// 	if err != nil {
+// 		slog.Warn("Failed to get hourly CPU metrics", "error", err)
+// 		cpuPerHour = [24]int{}
+// 	}
 
-	return ServiceMetrics{
-		RequestsPerHour: requestsPerHour,
-		CPUPerHour:      cpuPerHour,
-	}, nil
-}
+// 	return ServiceMetrics{
+// 		RequestsPerHour: requestsPerHour,
+// 		CPUPerHour:      cpuPerHour,
+// 	}, nil
+// }
 
-func getHourlyRequests(ctx context.Context, client *monitoring.MetricClient, projectID, location, serviceName string, startTime, endTime *timestamppb.Timestamp) ([24]int, error) {
-	req := &monitoringpb.ListTimeSeriesRequest{
-		Name:   fmt.Sprintf("projects/%s", projectID),
-		Filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND resource.labels.location="%s" AND metric.type="run.googleapis.com/request_count"`, serviceName, location),
-		Interval: &monitoringpb.TimeInterval{
-			EndTime:   endTime,
-			StartTime: startTime,
-		},
-		Aggregation: &monitoringpb.Aggregation{
-			AlignmentPeriod:    durationpb.New(3600 * time.Second), // 1 hour
-			PerSeriesAligner:   monitoringpb.Aggregation_ALIGN_RATE,
-			CrossSeriesReducer: monitoringpb.Aggregation_REDUCE_SUM,
-		},
-		View: monitoringpb.ListTimeSeriesRequest_FULL,
-	}
+// func getHourlyRequests(ctx context.Context, client *monitoring.MetricClient, projectID, location, serviceName string, startTime, endTime *timestamppb.Timestamp) ([24]int, error) {
+// 	req := &monitoringpb.ListTimeSeriesRequest{
+// 		Name:   fmt.Sprintf("projects/%s", projectID),
+// 		Filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND resource.labels.location="%s" AND metric.type="run.googleapis.com/request_count"`, serviceName, location),
+// 		Interval: &monitoringpb.TimeInterval{
+// 			EndTime:   endTime,
+// 			StartTime: startTime,
+// 		},
+// 		Aggregation: &monitoringpb.Aggregation{
+// 			AlignmentPeriod:    durationpb.New(3600 * time.Second), // 1 hour
+// 			PerSeriesAligner:   monitoringpb.Aggregation_ALIGN_RATE,
+// 			CrossSeriesReducer: monitoringpb.Aggregation_REDUCE_SUM,
+// 		},
+// 		View: monitoringpb.ListTimeSeriesRequest_FULL,
+// 	}
 
-	// Initialize array with 24 zeros (one for each hour)
-	var hourlyRequests [24]int
+// 	// Initialize array with 24 zeros (one for each hour)
+// 	var hourlyRequests [24]int
 
-	// Create a map to store data points by hour index
-	dataPoints := make(map[int]int64)
+// 	// Create a map to store data points by hour index
+// 	dataPoints := make(map[int]int64)
 
-	iterator := client.ListTimeSeries(ctx, req)
+// 	iterator := client.ListTimeSeries(ctx, req)
 
-	for {
-		resp, err := iterator.Next()
-		if err != nil {
-			break
-		}
+// 	for {
+// 		resp, err := iterator.Next()
+// 		if err != nil {
+// 			break
+// 		}
 
-		for _, point := range resp.Points {
-			// Calculate which hour this data point represents (0-23, where 0 is the most recent hour)
-			pointTime := point.Interval.EndTime.AsTime()
-			hoursAgo := int(time.Since(pointTime).Hours())
-			if hoursAgo >= 0 && hoursAgo < 24 {
-				// Store in reverse order (index 0 = most recent hour, index 23 = 24 hours ago)
-				dataPoints[hoursAgo] += point.Value.GetInt64Value()
-			}
-		}
-	}
+// 		for _, point := range resp.Points {
+// 			// Calculate which hour this data point represents (0-23, where 0 is the most recent hour)
+// 			pointTime := point.Interval.EndTime.AsTime()
+// 			hoursAgo := int(time.Since(pointTime).Hours())
+// 			if hoursAgo >= 0 && hoursAgo < 24 {
+// 				// Store in reverse order (index 0 = most recent hour, index 23 = 24 hours ago)
+// 				dataPoints[hoursAgo] += point.Value.GetInt64Value()
+// 			}
+// 		}
+// 	}
 
-	// Fill the array with data points
-	for i := range 24 {
-		if value, exists := dataPoints[i]; exists {
-			hourlyRequests[i] = int(value)
-		}
-		// hourlyRequests[i] += int(i)
-		// If no data exists for that hour, it remains 0
-	}
+// 	// Fill the array with data points
+// 	for i := range 24 {
+// 		if value, exists := dataPoints[i]; exists {
+// 			hourlyRequests[i] = int(value)
+// 		}
+// 		// hourlyRequests[i] += int(i)
+// 		// If no data exists for that hour, it remains 0
+// 	}
 
-	return hourlyRequests, nil
-}
+// 	return hourlyRequests, nil
+// }
 
-func getHourlyCPU(ctx context.Context, client *monitoring.MetricClient, projectID, location, serviceName string, startTime, endTime *timestamppb.Timestamp) ([24]int, error) {
-	req := &monitoringpb.ListTimeSeriesRequest{
-		Name:   fmt.Sprintf("projects/%s", projectID),
-		Filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND resource.labels.location="%s" AND metric.type="run.googleapis.com/container/cpu/utilizations"`, serviceName, location),
-		Interval: &monitoringpb.TimeInterval{
-			EndTime:   endTime,
-			StartTime: startTime,
-		},
-		Aggregation: &monitoringpb.Aggregation{
-			AlignmentPeriod:    durationpb.New(3600 * time.Second), // 1 hour
-			PerSeriesAligner:   monitoringpb.Aggregation_ALIGN_MEAN,
-			CrossSeriesReducer: monitoringpb.Aggregation_REDUCE_MEAN,
-		},
-		View: monitoringpb.ListTimeSeriesRequest_FULL,
-	}
+// func getHourlyCPU(ctx context.Context, client *monitoring.MetricClient, projectID, location, serviceName string, startTime, endTime *timestamppb.Timestamp) ([24]int, error) {
+// 	req := &monitoringpb.ListTimeSeriesRequest{
+// 		Name:   fmt.Sprintf("projects/%s", projectID),
+// 		Filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND resource.labels.location="%s" AND metric.type="run.googleapis.com/container/cpu/utilizations"`, serviceName, location),
+// 		Interval: &monitoringpb.TimeInterval{
+// 			EndTime:   endTime,
+// 			StartTime: startTime,
+// 		},
+// 		Aggregation: &monitoringpb.Aggregation{
+// 			AlignmentPeriod:    durationpb.New(3600 * time.Second), // 1 hour
+// 			PerSeriesAligner:   monitoringpb.Aggregation_ALIGN_MEAN,
+// 			CrossSeriesReducer: monitoringpb.Aggregation_REDUCE_MEAN,
+// 		},
+// 		View: monitoringpb.ListTimeSeriesRequest_FULL,
+// 	}
 
-	// Initialize array with 24 zeros (one for each hour)
-	var hourlyCPU [24]int
+// 	// Initialize array with 24 zeros (one for each hour)
+// 	var hourlyCPU [24]int
 
-	// Create a map to store data points by hour index
-	dataPoints := make(map[int]float64)
+// 	// Create a map to store data points by hour index
+// 	dataPoints := make(map[int]float64)
 
-	iterator := client.ListTimeSeries(ctx, req)
+// 	iterator := client.ListTimeSeries(ctx, req)
 
-	for {
-		resp, err := iterator.Next()
-		if err != nil {
-			break
-		}
+// 	for {
+// 		resp, err := iterator.Next()
+// 		if err != nil {
+// 			break
+// 		}
 
-		for _, point := range resp.Points {
-			// Calculate which hour this data point represents (0-23, where 0 is the most recent hour)
-			pointTime := point.Interval.EndTime.AsTime()
-			hoursAgo := int(time.Since(pointTime).Hours())
-			if hoursAgo >= 0 && hoursAgo < 24 {
-				// Store CPU utilization as percentage (0-100)
-				cpuPercent := point.Value.GetDoubleValue() * 100
-				dataPoints[hoursAgo] = cpuPercent
-			}
-		}
-	}
+// 		for _, point := range resp.Points {
+// 			// Calculate which hour this data point represents (0-23, where 0 is the most recent hour)
+// 			pointTime := point.Interval.EndTime.AsTime()
+// 			hoursAgo := int(time.Since(pointTime).Hours())
+// 			if hoursAgo >= 0 && hoursAgo < 24 {
+// 				// Store CPU utilization as percentage (0-100)
+// 				cpuPercent := point.Value.GetDoubleValue() * 100
+// 				dataPoints[hoursAgo] = cpuPercent
+// 			}
+// 		}
+// 	}
 
-	// Fill the array with data points
-	for i := range 24 {
-		if value, exists := dataPoints[i]; exists {
-			hourlyCPU[i] = int(value)
-		}
-		// If no data exists for that hour, it remains 0
-	}
+// 	// Fill the array with data points
+// 	for i := range 24 {
+// 		if value, exists := dataPoints[i]; exists {
+// 			hourlyCPU[i] = int(value)
+// 		}
+// 		// If no data exists for that hour, it remains 0
+// 	}
 
-	return hourlyCPU, nil
-}
+// 	return hourlyCPU, nil
+// }

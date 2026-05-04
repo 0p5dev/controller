@@ -90,7 +90,7 @@ func migrateSupabaseTokenHook(ctx context.Context, pool *pgxpool.Pool) error {
 		CREATE OR REPLACE FUNCTION public.custom_access_token_hook(event jsonb)
 		RETURNS jsonb
 		LANGUAGE plpgsql
-		STABLE
+		VOLATILE
 		AS $$
 		DECLARE
 			claims jsonb;

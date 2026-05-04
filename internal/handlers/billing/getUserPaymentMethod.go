@@ -13,22 +13,22 @@ func GetUserPaymentMethod(c *gin.Context) {
 	stripeClient := c.MustGet("StripeClient").(*stripe.Client)
 	ctx := c.Request.Context()
 
-	if userClaims.StripeCustomer_Id == nil {
+	if userClaims.UserMetadata.AppUser.StripeCustomer_Id == nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Stripe customer not found for this user",
 		})
 		return
 	}
 
-	if userClaims.StripePaymentMethodId == nil {
+	if userClaims.UserMetadata.AppUser.StripePaymentMethodId == nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "No payment method found for this user",
 		})
 		return
 	}
 
-	paymentMethod, err := stripeClient.V1Customers.RetrievePaymentMethod(ctx, *userClaims.StripePaymentMethodId, &stripe.CustomerRetrievePaymentMethodParams{
-		Customer: userClaims.StripeCustomer_Id,
+	paymentMethod, err := stripeClient.V1Customers.RetrievePaymentMethod(ctx, *userClaims.UserMetadata.AppUser.StripePaymentMethodId, &stripe.CustomerRetrievePaymentMethodParams{
+		Customer: userClaims.UserMetadata.AppUser.StripeCustomer_Id,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{

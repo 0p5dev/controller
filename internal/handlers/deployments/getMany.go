@@ -66,7 +66,7 @@ func GetMany(c *gin.Context) {
 
 	// Always filter by authenticated user's deployments (users can only see their own)
 	whereConditions = append(whereConditions, fmt.Sprintf("user_id = $%d", argIndex))
-	args = append(args, userClaims.User.Id)
+	args = append(args, userClaims.UserMetadata.AppUser.Id)
 	argIndex++
 
 	// Add search filter (searches across name, url, and container_image)

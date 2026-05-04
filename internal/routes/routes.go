@@ -33,7 +33,7 @@ func CreateRoutes(router *gin.Engine) {
 
 	containerImages := apiv1.Group("/container-images")
 	containerImages.Use(middleware.AuthMiddleware())
-	containerImages.POST("", containerImagesHandler.PushToRegistry)
+	containerImages.POST("", middleware.PaymentMethodMiddleware(), containerImagesHandler.PushToRegistry)
 
 	deployments := apiv1.Group("/deployments")
 	deployments.Use(middleware.AuthMiddleware())
@@ -41,7 +41,7 @@ func CreateRoutes(router *gin.Engine) {
 	deployments.PATCH("/:name", deploymentsHandler.UpdateOneByName)
 	deployments.DELETE("/:name", deploymentsHandler.DeleteOneByName)
 	deployments.GET("", deploymentsHandler.GetMany)
-	deployments.POST("", deploymentsHandler.CreateOne)
+	deployments.POST("", middleware.PaymentMethodMiddleware(), deploymentsHandler.CreateOne)
 
 	billing := apiv1.Group("/billing")
 	billing.GET("/payment-method", middleware.AuthMiddleware(), billingHandler.GetUserPaymentMethod)

@@ -63,7 +63,7 @@ func UpdateOneByName(c *gin.Context) {
 
 	// ensure deployment exists and belongs to user, return a 404 otherwise
 	var currentDeployment models.Deployment
-	err := pool.QueryRow(reqCtx, "SELECT id, container_image, min_instances, max_instances, port FROM deployments WHERE name = $1 AND user_id = $2", deploymentName, userClaims.User.Id).Scan(
+	err := pool.QueryRow(reqCtx, "SELECT id, container_image, min_instances, max_instances, port FROM deployments WHERE name = $1 AND user_id = $2", deploymentName, userClaims.UserMetadata.AppUser.Id).Scan(
 		&currentDeployment.Id,
 		&currentDeployment.ContainerImage,
 		&currentDeployment.MinInstances,

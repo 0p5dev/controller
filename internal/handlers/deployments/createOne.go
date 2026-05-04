@@ -56,7 +56,7 @@ func CreateOne(c *gin.Context) {
 	}
 
 	var existingDeployment bool
-	err := pool.QueryRow(reqCtx, `SELECT EXISTS(SELECT 1 FROM deployments WHERE name=$1 AND user_id=$2)`, reqBody.Name, userClaims.User.Id).Scan(&existingDeployment)
+	err := pool.QueryRow(reqCtx, `SELECT EXISTS(SELECT 1 FROM deployments WHERE name=$1 AND user_id=$2)`, reqBody.Name, userClaims.UserMetadata.AppUser.Id).Scan(&existingDeployment)
 	if err != nil {
 		slog.Error("Failed to check existing deployments", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -73,7 +73,7 @@ func CreateOne(c *gin.Context) {
 		return
 	}
 
-	serviceId := fmt.Sprintf("%s-%s", reqBody.Name, userClaims.User.Id)
+	serviceId := fmt.Sprintf("%s-%s", reqBody.Name, userClaims.UserMetadata.AppUser.Id)
 
 	// Create entry in provisioning_jobs table and return job ID to client
 	var jobId string
@@ -116,7 +116,7 @@ func CreateOne(c *gin.Context) {
 		serviceSpec := &runpb.Service{
 			Labels: map[string]string{
 				"created_by": "0p5dev_controller",
-				"user":       "user-" + userClaims.User.Id,
+				"user":       "user-" + userClaims.UserMetadata.AppUser.Id,
 			},
 			Scaling: &runpb.ServiceScaling{
 				MinInstanceCount: int32(effectiveMin),
@@ -180,7 +180,7 @@ func CreateOne(c *gin.Context) {
 		_, err = pool.Exec(ctx, `
 				INSERT INTO deployments (id, name, url, container_image, user_id, min_instances, max_instances)
 				VALUES ($1, $2, $3, $4, $5, $6, $7)
-			`, serviceId, reqBody.Name, serviceUrl, reqBody.ContainerImage, userClaims.User.Id, effectiveMin, effectiveMax)
+			`, serviceId, reqBody.Name, serviceUrl, reqBody.ContainerImage, userClaims.UserMetadata.AppUser.Id, effectiveMin, effectiveMax)
 		if err != nil {
 			slog.Error("Failed to record deployment in database", "error", err.Error())
 			sharedUtils.FailProvisioningJob(ctx, pool, jobId, "failed to record deployment in database: "+err.Error())

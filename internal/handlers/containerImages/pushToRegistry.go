@@ -64,6 +64,8 @@ func PushToRegistry(c *gin.Context) {
 	pool := c.MustGet("Pool").(*pgxpool.Pool)
 	ctx := context.Background()
 
+	// slog.Info("push to registry", "appUser", userClaims.UserMetadata.AppUserMetadata.AppUser)
+
 	// Read gzip stream from request body
 	gzipStream := c.Request.Body
 	contentType := c.ContentType()
@@ -120,7 +122,7 @@ func PushToRegistry(c *gin.Context) {
 	}
 
 	originalImageName := getImageNameFromTarballPath(tmpTarPath)
-	finalImageName := fmt.Sprintf("%s-%s", originalImageName, userClaims.User.Id)
+	finalImageName := fmt.Sprintf("%s-%s", originalImageName, userClaims.UserMetadata.AppUser.Id)
 
 	// Tag image for target registry
 	arRepoUrl := os.Getenv("AR_REPO_URL")
@@ -137,7 +139,7 @@ func PushToRegistry(c *gin.Context) {
 
 	imageRef, err := name.ParseReference(targetTag)
 	if err != nil {
-		slog.Error("Failed to parse source reference", "user_id", userClaims.User.Id, "user_email", userClaims.User.Email, "error", err)
+		slog.Error("Failed to parse source reference", "user_id", userClaims.UserMetadata.AppUser.Id, "user_email", userClaims.UserMetadata.AppUser.Email, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to parse source reference: %v", err),
 		})
@@ -158,9 +160,9 @@ func PushToRegistry(c *gin.Context) {
 	_, err = pool.Exec(ctx, `
 			INSERT INTO container_images (fqin, user_id)
 			VALUES ($1, $2)
-		`, targetTag, userClaims.User.Id)
+		`, targetTag, userClaims.UserMetadata.AppUser.Id)
 	if err != nil {
-		slog.Error("DB insert error", "user_id", userClaims.User.Id, "user_email", userClaims.User.Email, "error", err)
+		slog.Error("DB insert error", "user_id", userClaims.UserMetadata.AppUser.Id, "user_email", userClaims.UserMetadata.AppUser.Email, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to record image in database: %v", err),
 		})

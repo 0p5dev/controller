@@ -48,27 +48,13 @@ func getUserClaims(authHeader string, pool *pgxpool.Pool, stripeClient *stripe.C
 		return nil, fmt.Errorf("failed to get or create user: %v", err)
 	}
 
-	// var user models.User
-	// err = pool.QueryRow(context.Background(), `SELECT id, email, stripe_customer_id, stripe_payment_method_id, last_billed_at, created_at, updated_at FROM users WHERE email=$1`, oauthClaims.Email).Scan(&user.Id, &user.Email, &user.StripeCustomer_Id, &user.StripePaymentMethodId, &user.LastBilledAt, &user.CreatedAt, &user.UpdatedAt)
-	// if err != nil {
-	// 	if errors.Is(err, pgx.ErrNoRows) {
-	// 		err = pool.QueryRow(context.Background(), `
-	// 			INSERT INTO users (email)
-	// 			VALUES ($1)
-	// 			RETURNING id, email, stripe_customer_id, stripe_payment_method_id, last_billed_at, created_at, updated_at
-	// 		`, oauthClaims.Email).Scan(&user.Id, &user.Email, &user.StripeCustomer_Id, &user.StripePaymentMethodId, &user.LastBilledAt, &user.CreatedAt, &user.UpdatedAt)
-	// 		if err != nil {
-	// 			return nil, fmt.Errorf("failed to create user in database: %v", err)
-	// 		}
-	// 		slog.Info("Created new user in database", "email", oauthClaims.Email)
-	// 	} else {
-	// 		return nil, fmt.Errorf("failed to fetch user from database: %v", err)
-	// 	}
-	// }
-
 	userClaims := &sharedUtils.UserClaims{
 		OauthClaims: *oauthClaims,
-		User:        user,
+		// User:        user,
+	}
+
+	if userClaims.UserMetadata.AppUser == nil {
+		userClaims.UserMetadata.AppUser = &user
 	}
 
 	return userClaims, nil

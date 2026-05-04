@@ -4,7 +4,6 @@ go 1.26.1
 
 require (
 	cloud.google.com/go/iam v1.5.3
-	cloud.google.com/go/monitoring v1.24.3
 	cloud.google.com/go/run v1.15.0
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-gonic/gin v1.11.0

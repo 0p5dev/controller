@@ -14,8 +14,9 @@ func CreateSetupIntent(c *gin.Context) {
 	stripeClient := c.MustGet("StripeClient").(*stripe.Client)
 	ctx := c.Request.Context()
 
+	slog.Info("CreateSetupIntent", "customer", userClaims.UserMetadata.AppUser.Email)
 	customersList := stripeClient.V1Customers.List(ctx, &stripe.CustomerListParams{
-		Email: stripe.String(userClaims.User.Email),
+		Email: stripe.String(userClaims.UserMetadata.AppUser.Email),
 	})
 	var existingCustomer *stripe.Customer
 	for customer, err := range customersList {

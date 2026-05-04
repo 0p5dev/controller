@@ -44,9 +44,9 @@ func DeleteOneByName(c *gin.Context) {
 
 	// Verify the deployment belongs to the authenticated user
 	var deploymentId string
-	err := pool.QueryRow(ctx, "SELECT id FROM deployments WHERE name = $1 AND user_id = $2", deploymentName, userClaims.User.Id).Scan(&deploymentId)
+	err := pool.QueryRow(ctx, "SELECT id FROM deployments WHERE name = $1 AND user_id = $2", deploymentName, userClaims.UserMetadata.AppUser.Id).Scan(&deploymentId)
 	if err != nil {
-		slog.Error("Error finding deployment", "deployment", deploymentName, "user_id", userClaims.User.Id, "user_email", userClaims.User.Email, "error", err)
+		slog.Error("Error finding deployment", "deployment", deploymentName, "user_id", userClaims.UserMetadata.AppUser.Id, "user_email", userClaims.UserMetadata.AppUser.Email, "error", err)
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "deployment not found",
 		})
