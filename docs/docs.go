@@ -689,7 +689,7 @@ const docTemplate = `{
                 "url": {
                     "type": "string"
                 },
-                "user_email": {
+                "user_id": {
                     "type": "string"
                 }
             }

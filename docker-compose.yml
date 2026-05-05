@@ -29,6 +29,7 @@ services:
       # Anything not specified here is a secret, and must be specified in the .env file, or be passed as an ENV var to the container at runtime.
       POSTGRES_CONNECTION_STRING: ${POSTGRES_CONNECTION_STRING}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      STRIPE_API_KEY: ${STRIPE_API_KEY}
       AR_REPO_URL: us-central1-docker.pkg.dev/local-first-476300/container-images-dev
       GCP_PROJECT_ID: local-first-476300
       GCP_REGION: us-central1

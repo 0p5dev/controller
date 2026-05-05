@@ -1,10 +1,9 @@
 module github.com/0p5dev/controller
 
-go 1.25.3
+go 1.26.2
 
 require (
 	cloud.google.com/go/iam v1.5.3
-	cloud.google.com/go/monitoring v1.24.3
 	cloud.google.com/go/run v1.15.0
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-gonic/gin v1.11.0
@@ -12,6 +11,7 @@ require (
 	github.com/google/go-containerregistry v0.20.6
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
+	github.com/stripe/stripe-go/v84 v84.4.1
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.1
 	github.com/swaggo/swag v1.16.6
