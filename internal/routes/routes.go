@@ -14,6 +14,7 @@ import (
 	deploymentsHandler "github.com/0p5dev/controller/internal/handlers/deployments"
 	healthHandler "github.com/0p5dev/controller/internal/handlers/health"
 	provisioningJobsHandler "github.com/0p5dev/controller/internal/handlers/provisioningJobs"
+	usersHandler "github.com/0p5dev/controller/internal/handlers/users"
 )
 
 func CreateRoutes(router *gin.Engine) {
@@ -30,6 +31,8 @@ func CreateRoutes(router *gin.Engine) {
 	apiv1.GET("/health", healthHandler.CheckHealth)
 
 	apiv1.GET("/provisioning-jobs/:job_id/status", provisioningJobsHandler.GetStatus)
+
+	apiv1.GET("/user", middleware.AuthMiddleware(), usersHandler.GetOne)
 
 	containerImages := apiv1.Group("/container-images")
 	containerImages.Use(middleware.AuthMiddleware())

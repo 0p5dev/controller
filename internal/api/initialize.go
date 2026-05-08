@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/gin-contrib/cors"
@@ -37,6 +38,13 @@ func Initialize(router *gin.Engine) error {
 	if err := ensureEnvVars(); err != nil {
 		return err
 	}
+
+	// Configure logging level based on environment
+	logLevel := slog.LevelInfo
+	if os.Getenv("GIN_MODE") != "release" {
+		logLevel = slog.LevelDebug
+	}
+	slog.SetLogLoggerLevel(logLevel)
 
 	// Configure CORS
 	corsConfig := cors.Config{

@@ -10,7 +10,6 @@ import (
 
 func SloggerMiddleware() gin.HandlerFunc {
 	gcpJsonHandler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level:       slog.LevelInfo,
 		ReplaceAttr: sloggcp.ReplaceAttr,
 		AddSource:   true,
 	})

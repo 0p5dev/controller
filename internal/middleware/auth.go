@@ -50,12 +50,8 @@ func getUserClaims(authHeader string, pool *pgxpool.Pool, stripeClient *stripe.C
 
 	userClaims := &sharedUtils.UserClaims{
 		OauthClaims: *oauthClaims,
-		// User:        user,
 	}
-
-	if userClaims.UserMetadata.AppUser == nil {
-		userClaims.UserMetadata.AppUser = &user
-	}
+	userClaims.UserMetadata.AppUser = &user
 
 	return userClaims, nil
 }
