@@ -178,9 +178,9 @@ func CreateOne(c *gin.Context) {
 
 		// Record deployment in database
 		_, err = pool.Exec(ctx, `
-				INSERT INTO deployments (id, name, url, container_image, user_id, min_instances, max_instances)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)
-			`, serviceId, reqBody.Name, serviceUrl, reqBody.ContainerImage, userClaims.UserMetadata.AppUser.Id, effectiveMin, effectiveMax)
+				INSERT INTO deployments (id, name, url, container_image, user_id, min_instances, max_instances, port)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			`, serviceId, reqBody.Name, serviceUrl, reqBody.ContainerImage, userClaims.UserMetadata.AppUser.Id, effectiveMin, effectiveMax, effectivePort)
 		if err != nil {
 			slog.Error("Failed to record deployment in database", "error", err.Error())
 			sharedUtils.FailProvisioningJob(ctx, pool, jobId, "failed to record deployment in database: "+err.Error())

@@ -108,7 +108,7 @@ func GetOrCreateUser(pool *pgxpool.Pool, oauthClaims OauthClaims, stripeClient *
 	}
 
 	if stripeCustomer == nil {
-		stripeCustomer, err = createStripeCustomer(ctx, stripeClient, oauthClaims.Email, normalizedEmail)
+		stripeCustomer, err = createStripeCustomer(ctx, stripeClient, oauthClaims.Email)
 		if err != nil {
 			return models.User{}, err
 		}
@@ -184,11 +184,10 @@ func findStripeCustomerByEmail(ctx context.Context, stripeClient *stripe.Client,
 	return selectedCustomer, nil
 }
 
-func createStripeCustomer(ctx context.Context, stripeClient *stripe.Client, email string, normalizedEmail string) (*stripe.Customer, error) {
+func createStripeCustomer(ctx context.Context, stripeClient *stripe.Client, email string) (*stripe.Customer, error) {
 	customerParams := &stripe.CustomerCreateParams{
 		Email: stripe.String(email),
 	}
-	customerParams.SetIdempotencyKey("user-customer-" + HashEmail(normalizedEmail))
 
 	customer, err := stripeClient.V1Customers.Create(ctx, customerParams)
 	if err != nil {
