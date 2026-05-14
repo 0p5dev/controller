@@ -1,0 +1,29 @@
+apiVersion: deploy.cloud.google.com/v1
+kind: DeliveryPipeline
+metadata:
+  name: controller-pipeline
+description: A pipeline to deploy the 0p5.dev controller to Cloud Run
+serialPipeline:
+  stages:
+  - targetId: staging
+    profiles: [staging]
+  - targetId: production
+    profiles: [production]
+---
+
+apiVersion: deploy.cloud.google.com/v1
+kind: Target
+metadata:
+  name: staging
+description: Cloud Run staging service
+run:
+  location: projects/local-first-476300/locations/us-central1
+---
+
+apiVersion: deploy.cloud.google.com/v1
+kind: Target
+metadata:
+  name: production
+description: Cloud Run production service
+run:
+  location: projects/local-first-476300/locations/us-central1

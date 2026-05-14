@@ -1,4 +1,4 @@
-package api
+package deployments
 
 import (
 	"fmt"
@@ -8,9 +8,10 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/0p5dev/controller/internal/data/models"
-	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
+	"github.com/0p5dev/controller/internal/models"
+	"github.com/0p5dev/controller/internal/sharedUtils"
 )
 
 type PaginatedDeploymentsResponse struct {
@@ -33,8 +34,9 @@ type PaginatedDeploymentsResponse struct {
 // @Failure 401 {object} map[string]string "Unauthorized"
 // @Failure 500 {object} map[string]string "Failed to retrieve deployments"
 // @Router /deployments [get]
-func (app *App) listDeployments(c *gin.Context) {
-	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
+func GetMany(c *gin.Context) {
+	userClaims := c.MustGet("UserClaims").(*sharedUtils.UserClaims)
+	pool := c.MustGet("Pool").(*pgxpool.Pool)
 
 	ctx := c.Request.Context()
 
@@ -63,8 +65,8 @@ func (app *App) listDeployments(c *gin.Context) {
 	argIndex := 1
 
 	// Always filter by authenticated user's deployments (users can only see their own)
-	whereConditions = append(whereConditions, fmt.Sprintf("user_email = $%d", argIndex))
-	args = append(args, userClaims.Email)
+	whereConditions = append(whereConditions, fmt.Sprintf("user_id = $%d", argIndex))
+	args = append(args, userClaims.UserMetadata.AppUser.Id)
 	argIndex++
 
 	// Add search filter (searches across name, url, and container_image)
@@ -83,7 +85,7 @@ func (app *App) listDeployments(c *gin.Context) {
 	// Get total count for pagination
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM deployments %s", whereClause)
 	var totalCount int
-	err = app.Pool.QueryRow(ctx, countQuery, args...).Scan(&totalCount)
+	err = pool.QueryRow(ctx, countQuery, args...).Scan(&totalCount)
 	if err != nil {
 		slog.Error("Error counting deployments", "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -94,7 +96,7 @@ func (app *App) listDeployments(c *gin.Context) {
 
 	// Get deployments with pagination
 	query := fmt.Sprintf(`
-		SELECT id, name, url, container_image, user_email, min_instances, max_instances, port, created_at, updated_at FROM deployments
+		SELECT id, name, url, container_image, user_id, min_instances, max_instances, port, created_at, updated_at FROM deployments
 		%s
 		ORDER BY name ASC
 		LIMIT $%d OFFSET $%d
@@ -103,7 +105,7 @@ func (app *App) listDeployments(c *gin.Context) {
 	// Add limit and offset to args
 	args = append(args, limit, offset)
 
-	rows, err := app.Pool.Query(ctx, query, args...)
+	rows, err := pool.Query(ctx, query, args...)
 	if err != nil {
 		slog.Error("Error querying deployments", "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -113,7 +115,7 @@ func (app *App) listDeployments(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var deployments []models.Deployment
+	deployments := []models.Deployment{}
 	for rows.Next() {
 		var deployment models.Deployment
 		err := rows.Scan(
@@ -121,7 +123,7 @@ func (app *App) listDeployments(c *gin.Context) {
 			&deployment.Name,
 			&deployment.Url,
 			&deployment.ContainerImage,
-			&deployment.UserEmail,
+			&deployment.UserId,
 			&deployment.MinInstances,
 			&deployment.MaxInstances,
 			&deployment.Port,

@@ -1,4 +1,4 @@
-package api
+package containerImages
 
 import (
 	"compress/gzip"
@@ -12,8 +12,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 
-	sharedtypes "github.com/0p5dev/controller/pkg/sharedTypes"
+	"github.com/0p5dev/controller/internal/sharedUtils"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/google"
@@ -58,10 +59,12 @@ func getImageNameFromTarballPath(tarPath string) string {
 // @Failure 415 {object} map[string]string "Unsupported media type"
 // @Failure 500 {object} map[string]string "Failed to push image"
 // @Router /container-images [post]
-func (app *App) pushToContainerRegistry(c *gin.Context) {
-	userClaims := c.MustGet("userClaims").(*sharedtypes.UserClaims)
-
+func PushToRegistry(c *gin.Context) {
+	userClaims := c.MustGet("UserClaims").(*sharedUtils.UserClaims)
+	pool := c.MustGet("Pool").(*pgxpool.Pool)
 	ctx := context.Background()
+
+	// slog.Info("push to registry", "appUser", userClaims.UserMetadata.AppUserMetadata.AppUser)
 
 	// Read gzip stream from request body
 	gzipStream := c.Request.Body
@@ -119,8 +122,7 @@ func (app *App) pushToContainerRegistry(c *gin.Context) {
 	}
 
 	originalImageName := getImageNameFromTarballPath(tmpTarPath)
-	hashedEmail := hashEmail(userClaims.Email)
-	finalImageName := fmt.Sprintf("%s-%s", originalImageName, hashedEmail)
+	finalImageName := fmt.Sprintf("%s-%s", originalImageName, userClaims.UserMetadata.AppUser.Id)
 
 	// Tag image for target registry
 	arRepoUrl := os.Getenv("AR_REPO_URL")
@@ -137,7 +139,7 @@ func (app *App) pushToContainerRegistry(c *gin.Context) {
 
 	imageRef, err := name.ParseReference(targetTag)
 	if err != nil {
-		slog.Error("Failed to parse source reference", "error", err)
+		slog.Error("Failed to parse source reference", "user_id", userClaims.UserMetadata.AppUser.Id, "user_email", userClaims.UserMetadata.AppUser.Email, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to parse source reference: %v", err),
 		})
@@ -155,12 +157,12 @@ func (app *App) pushToContainerRegistry(c *gin.Context) {
 	}
 
 	// Record pushed image in database
-	_, err = app.Pool.Exec(ctx, `
-			INSERT INTO container_images (fqin, user_email)
+	_, err = pool.Exec(ctx, `
+			INSERT INTO container_images (fqin, user_id)
 			VALUES ($1, $2)
-		`, targetTag, userClaims.Email)
+		`, targetTag, userClaims.UserMetadata.AppUser.Id)
 	if err != nil {
-		slog.Error("DB insert error", "error", err)
+		slog.Error("DB insert error", "user_id", userClaims.UserMetadata.AppUser.Id, "user_email", userClaims.UserMetadata.AppUser.Email, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("Failed to record image in database: %v", err),
 		})

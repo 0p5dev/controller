@@ -1,0 +1,15 @@
+apiVersion: skaffold/v4beta7
+kind: Config
+metadata: 
+  name: controller
+profiles:
+- name: staging
+  manifests:
+    rawYaml:
+    - controller-staging.yaml
+- name: production
+  manifests:
+    rawYaml:
+    - controller-production.yaml
+deploy:
+  cloudrun: {}
