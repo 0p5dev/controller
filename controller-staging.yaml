@@ -1,0 +1,31 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: controller-staging
+spec:
+  template:
+    spec:
+      serviceAccountName: controller-sa-staging@local-first-476300.iam.gserviceaccount.com
+      containers:
+      - image: image
+        env:
+        - name: POSTGRES_CONNECTION_STRING
+          valueFrom:
+            secretKeyRef:
+              name: supabase_connection_string_dev
+              key: "1"
+        - name: SUPABASE_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: supabase_jwt_secret_dev
+              key: "1"
+        - name: GIN_MODE
+          value: release
+        - name: SERVICE_ACCOUNT_EMAIL
+          value: user-service-sa-dev@local-first-476300.iam.gserviceaccount.com
+        - name: AR_REPO_URL
+          value: us-central1-docker.pkg.dev/local-first-476300/container-images-dev
+        - name: GCP_PROJECT_ID
+          value: local-first-476300
+        - name: GCP_REGION
+          value: us-central1
