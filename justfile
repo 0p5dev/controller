@@ -31,7 +31,7 @@ build-docker:
     docker build -t controller:dev -f Dockerfile .
 
 run-docker:
-    docker run -it --rm --name controller -p 8080:8080 -v /var/run/docker.sock:/var/run/docker.sock controller:dev
+    docker run -it --rm --name controller-dev -p 8080:8080 --env-file .env -v ~/.config/gcloud/application_default_credentials.json:/app/adc.json:ro controller:dev
 
 tag TAG:
     docker tag controller:dev us-central1-docker.pkg.dev/local-first-476300/open-source-application-images/controller:{{TAG}}

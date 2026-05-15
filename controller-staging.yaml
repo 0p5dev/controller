@@ -19,6 +19,11 @@ spec:
             secretKeyRef:
               name: supabase_jwt_secret_dev
               key: "1"
+        - name: STRIPE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: stripe-api-key-staging
+              key: "1"
         - name: STRIPE_WEBHOOK_SIGNING_SECRET
           valueFrom:
             secretKeyRef:
