@@ -4,6 +4,9 @@ metadata:
   name: controller-staging
 spec:
   template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: 1
     spec:
       serviceAccountName: controller-sa-staging@local-first-476300.iam.gserviceaccount.com
       containers:
