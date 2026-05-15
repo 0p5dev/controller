@@ -22,11 +22,11 @@ steps:
 
   - id: Create a Cloud Deploy release
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
-    entrypoint: bash
+    entrypoint: gcloud
     args:
-      - -c
       - |
-        gcloud deploy releases create $_RELEASE_ID \
+        deploy releases create $_RELEASE_ID \
+          --project=$_AR_PROJECT_ID \
           --delivery-pipeline=controller-pipeline \
           --region=us-central1 \
           --images=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
