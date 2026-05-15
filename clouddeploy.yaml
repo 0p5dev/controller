@@ -33,6 +33,12 @@ metadata:
 description: Cloud Run staging service
 run:
   location: projects/local-first-476300/locations/us-central1
+executionConfigs:
+  - usages:
+    - RENDER
+    - DEPLOY
+    - POSTDEPLOY
+    serviceAccount: cloud-build-sa@local-first-476300.iam.gserviceaccount.com
 ---
 
 apiVersion: deploy.cloud.google.com/v1
