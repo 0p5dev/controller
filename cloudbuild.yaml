@@ -63,19 +63,18 @@ substitutions:
   _AR_REPOSITORY: open-source-application-images
   _AR_PROJECT_ID: local-first-476300
   _USER_AR_REPO_URL: us-central1-docker.pkg.dev/local-first-476300/container-images-dev
-  _GIN_MODE: release
-  _USER_SERVICE_ACCOUNT_EMAIL: user-service-sa-dev@local-first-476300.iam.gserviceaccount.com
-  _CONTROLLER_SERVICE_ACCOUNT: controller-sa-staging@local-first-476300.iam.gserviceaccount.com
+  # _GIN_MODE: release
+  # _USER_SERVICE_ACCOUNT_EMAIL: user-service-sa-dev@local-first-476300.iam.gserviceaccount.com
+  # _CONTROLLER_SERVICE_ACCOUNT: controller-sa-staging@local-first-476300.iam.gserviceaccount.com
   _RELEASE_ID: controller-0p5dev-release-$COMMIT_SHA
 
 tags:
-  - development
   - controller
-  - vm
+  - opsdev
 
-availableSecrets:
-  secretManager:
-    - versionName: projects/160851347747/secrets/supabase_connection_string_dev/versions/1
-      env: "POSTGRES_CONNECTION_STRING"
-    - versionName: projects/160851347747/secrets/supabase_jwt_secret_dev/versions/1
-      env: "SUPABASE_JWT_SECRET"
+# availableSecrets:
+#   secretManager:
+#     - versionName: projects/160851347747/secrets/supabase_connection_string_dev/versions/1
+#       env: "POSTGRES_CONNECTION_STRING"
+#     - versionName: projects/160851347747/secrets/supabase_jwt_secret_dev/versions/1
+#       env: "SUPABASE_JWT_SECRET"
