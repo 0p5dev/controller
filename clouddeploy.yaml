@@ -10,17 +10,19 @@ serialPipeline:
     strategy:
       standard:
         postdeploy:
-          actions:
-            - name: make-publicly-accessible
-              args:
-                - gcloud
-                - run
-                - services
-                - add-iam-policy-binding
-                - controller-staging
-                - --region=us-central1
-                - --member=allUsers
-                - --role=roles/run.invoker
+          tasks:
+            - makePublic:
+                type: container
+                image: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+                command: gcloud
+                args:
+                  - run
+                  - services
+                  - add-iam-policy-binding
+                  - controller-staging
+                  - --region=us-central1
+                  - --member=allUsers
+                  - --role=roles/run.invoker
   - targetId: production
     profiles: [production]
 ---
