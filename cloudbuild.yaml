@@ -26,7 +26,7 @@ steps:
     args:
       - -ceu
       - |
-        gcloud deploy releases create $_RELEASE_ID \
+        gcloud deploy releases create ${_SERVICE_NAME}-release-${COMMIT_SHA} \
           --project=$_AR_PROJECT_ID \
           --delivery-pipeline=$_PIPELINE \
           --region=$_DEPLOY_REGION \
@@ -58,17 +58,16 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 substitutions:
-  _SERVICE_NAME: controller-0p5dev
+  _SERVICE_NAME: controller
   _DEPLOY_REGION: us-central1
   _AR_HOSTNAME: us-central1-docker.pkg.dev
   _AR_REPOSITORY: open-source-application-images
   _AR_PROJECT_ID: local-first-476300
   _USER_AR_REPO_URL: us-central1-docker.pkg.dev/local-first-476300/container-images-dev
+  _PIPELINE: controller-pipeline
   # _GIN_MODE: release
   # _USER_SERVICE_ACCOUNT_EMAIL: user-service-sa-dev@local-first-476300.iam.gserviceaccount.com
   # _CONTROLLER_SERVICE_ACCOUNT: controller-sa-staging@local-first-476300.iam.gserviceaccount.com
-  _RELEASE_ID: controller-0p5dev-release-$COMMIT_SHA
-  _PIPELINE: controller-pipeline
 
 tags:
   - controller
