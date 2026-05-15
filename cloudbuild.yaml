@@ -20,15 +20,16 @@ steps:
         buildah push \
           $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest
 
-  - id: Create a Cloud Deploy release
+  - id: Create Cloud Deploy release
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
-    entrypoint: gcloud
+    entrypoint: bash
     args:
+      - -ceu
       - |
-        deploy releases create $_RELEASE_ID \
+        gcloud deploy releases create $_RELEASE_ID \
           --project=$_AR_PROJECT_ID \
-          --delivery-pipeline=controller-pipeline \
-          --region=us-central1 \
+          --delivery-pipeline=$_PIPELINE \
+          --region=$_DEPLOY_REGION \
           --images=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
 
   # - id: Deploy to Cloud Run
@@ -67,6 +68,7 @@ substitutions:
   # _USER_SERVICE_ACCOUNT_EMAIL: user-service-sa-dev@local-first-476300.iam.gserviceaccount.com
   # _CONTROLLER_SERVICE_ACCOUNT: controller-sa-staging@local-first-476300.iam.gserviceaccount.com
   _RELEASE_ID: controller-0p5dev-release-$COMMIT_SHA
+  _PIPELINE: controller-pipeline
 
 tags:
   - controller
