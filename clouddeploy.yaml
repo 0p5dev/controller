@@ -12,11 +12,11 @@ serialPipeline:
         postdeploy:
           tasks:
           - type: container
+            env:
+              SERVICE_NAME: "${{ render.metadata.cloud_run.service.name }}"
+              REGION: "${{ cloud_run.location }}"
             image: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
             command: ["gcloud"]
-            env:
-              - SERVICE_NAME: "${{ render.metadata.cloud_run.service.name }}"
-              - REGION: "${{ cloud_run.location }}"
             args:
               - run
               - services
