@@ -11,18 +11,17 @@ serialPipeline:
       standard:
         postdeploy:
           tasks:
-            - makePublic:
-                type: container
-                image: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-                command: gcloud
-                args:
-                  - run
-                  - services
-                  - add-iam-policy-binding
-                  - controller-staging
-                  - --region=us-central1
-                  - --member=allUsers
-                  - --role=roles/run.invoker
+          - type: container
+            image: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+            command: ["gcloud"]
+            args:
+              - run
+              - services
+              - add-iam-policy-binding
+              - ${CLOUD_RUN_SERVICE}
+              - --region=${CLOUD_RUN_LOCATION}
+              - --member=allUsers
+              - --role=roles/run.invoker
   - targetId: production
     profiles: [production]
 ---

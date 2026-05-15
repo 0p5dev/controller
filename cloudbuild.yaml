@@ -20,6 +20,17 @@ steps:
         buildah push \
           $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest
 
+  - id: Upsert Cloud Deploy pipeline
+    name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        gcloud deploy apply \
+          --project=$_AR_PROJECT_ID \
+          --region=$_DEPLOY_REGION \
+          --file=clouddeploy.yaml
+
   - id: Create Cloud Deploy release
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
     entrypoint: bash
@@ -31,25 +42,6 @@ steps:
           --delivery-pipeline=$_PIPELINE \
           --region=$_DEPLOY_REGION \
           --images=image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$SHORT_SHA
-
-  # - id: Deploy to Cloud Run
-  #   name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
-  #   secretEnv:
-  #     - POSTGRES_CONNECTION_STRING
-  #     - SUPABASE_JWT_SECRET
-  #   entrypoint: bash
-  #   args:
-  #     - -ceu
-  #     - |
-  #       gcloud run services update $_SERVICE_NAME \
-  #         --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$SHORT_SHA \
-  #         --region=$_DEPLOY_REGION \
-  #         --quiet \
-  #         --max 1 \
-  #         --max-instances 1 \
-  #         --service-account=$_CONTROLLER_SERVICE_ACCOUNT \
-  #         --set-env-vars \
-  #         "POSTGRES_CONNECTION_STRING=$$POSTGRES_CONNECTION_STRING,SUPABASE_JWT_SECRET=$$SUPABASE_JWT_SECRET,GIN_MODE=$_GIN_MODE,SERVICE_ACCOUNT_EMAIL=$_USER_SERVICE_ACCOUNT_EMAIL,AR_REPO_URL=$_USER_AR_REPO_URL,GCP_PROJECT_ID=$_AR_PROJECT_ID,GCP_REGION=$_DEPLOY_REGION"
 
 serviceAccount: projects/local-first-476300/serviceAccounts/cloud-build-sa@local-first-476300.iam.gserviceaccount.com
 
@@ -63,19 +55,8 @@ substitutions:
   _AR_HOSTNAME: us-central1-docker.pkg.dev
   _AR_REPOSITORY: open-source-application-images
   _AR_PROJECT_ID: local-first-476300
-  _USER_AR_REPO_URL: us-central1-docker.pkg.dev/local-first-476300/container-images-dev
   _PIPELINE: controller-pipeline
-  # _GIN_MODE: release
-  # _USER_SERVICE_ACCOUNT_EMAIL: user-service-sa-dev@local-first-476300.iam.gserviceaccount.com
-  # _CONTROLLER_SERVICE_ACCOUNT: controller-sa-staging@local-first-476300.iam.gserviceaccount.com
 
 tags:
   - controller
   - opsdev
-
-# availableSecrets:
-#   secretManager:
-#     - versionName: projects/160851347747/secrets/supabase_connection_string_dev/versions/1
-#       env: "POSTGRES_CONNECTION_STRING"
-#     - versionName: projects/160851347747/secrets/supabase_jwt_secret_dev/versions/1
-#       env: "SUPABASE_JWT_SECRET"
