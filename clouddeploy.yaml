@@ -18,8 +18,8 @@ serialPipeline:
               - run
               - services
               - add-iam-policy-binding
-              - ${CLOUD_RUN_SERVICE}
-              - --region=${CLOUD_RUN_LOCATION}
+              - controller-staging
+              - --region=us-central1
               - --member=allUsers
               - --role=roles/run.invoker
   - targetId: production
