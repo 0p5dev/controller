@@ -6,7 +6,7 @@ steps:
       - -c
       - |
         buildah build \
-          --tag $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA \
+          --tag $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$SHORT_SHA \
           --tag $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest \
           --file ./Dockerfile \
           --format docker \
@@ -16,7 +16,7 @@ steps:
           .
 
         buildah push \
-          $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+          $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$SHORT_SHA
         buildah push \
           $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:latest
 
@@ -26,11 +26,11 @@ steps:
     args:
       - -ceu
       - |
-        gcloud deploy releases create ${_SERVICE_NAME}-release-${COMMIT_SHA} \
+        gcloud deploy releases create ${_SERVICE_NAME}-release-${SHORT_SHA} \
           --project=$_AR_PROJECT_ID \
           --delivery-pipeline=$_PIPELINE \
           --region=$_DEPLOY_REGION \
-          --images=image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+          --images=image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$SHORT_SHA
 
   # - id: Deploy to Cloud Run
   #   name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
@@ -42,7 +42,7 @@ steps:
   #     - -ceu
   #     - |
   #       gcloud run services update $_SERVICE_NAME \
-  #         --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA \
+  #         --image=$_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$SHORT_SHA \
   #         --region=$_DEPLOY_REGION \
   #         --quiet \
   #         --max 1 \
