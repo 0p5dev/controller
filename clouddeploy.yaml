@@ -7,6 +7,20 @@ serialPipeline:
   stages:
   - targetId: staging
     profiles: [staging]
+    strategy:
+      standard:
+        postdeploy:
+          actions:
+            - name: make-publicly-accessible
+              args:
+                - gcloud
+                - run
+                - services
+                - add-iam-policy-binding
+                - controller-staging
+                - --region=us-central1
+                - --member=allUsers
+                - --role=roles/run.invoker
   - targetId: production
     profiles: [production]
 ---

@@ -2,6 +2,8 @@ apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
   name: controller-staging
+  annotations:
+    run.googleapis.com/maxScale: 1
 spec:
   template:
     metadata:
