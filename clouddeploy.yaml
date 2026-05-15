@@ -12,17 +12,14 @@ serialPipeline:
         postdeploy:
           tasks:
           - type: container
-            env:
-              SERVICE_NAME: "${{ render.metadata.cloud_run.service.name }}"
-              REGION: "${{ cloud_run.location }}"
             image: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
             command: ["gcloud"]
             args:
               - run
               - services
               - add-iam-policy-binding
-              - ${SERVICE_NAME}
-              - --region=${REGION}
+              - controller-staging
+              - --region=us-central1
               - --member=allUsers
               - --role=roles/run.invoker
   - targetId: production
