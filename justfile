@@ -50,3 +50,6 @@ swagger:
 
 listen-webhook:
     stripe listen --forward-to localhost:8080/api/v1/billing/webhook
+
+auth-gcloud:
+    gcloud auth application-default login --impersonate-service-account=controller-sa-staging@local-first-476300.iam.gserviceaccount.com

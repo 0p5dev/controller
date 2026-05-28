@@ -28,7 +28,7 @@ func MigrateProvisioningJobTable(pool *pgxpool.Pool) error {
 	ctx := context.Background()
 	_, err := pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS provisioning_jobs (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			id VARCHAR(26) PRIMARY KEY,
 			resource_id TEXT NOT NULL,
 			status TEXT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

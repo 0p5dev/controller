@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	run "cloud.google.com/go/run/apiv2"
 	runpb "cloud.google.com/go/run/apiv2/runpb"
@@ -14,6 +16,7 @@ import (
 	"github.com/0p5dev/controller/internal/sharedUtils"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oklog/ulid/v2"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
@@ -78,8 +81,19 @@ func UpdateOneByName(c *gin.Context) {
 	}
 
 	// Create entry in provisioning_jobs table and return job ID to client
+	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
+	ms := ulid.Timestamp(time.Now())
+	id, err := ulid.New(ms, entropy)
+	if err != nil {
+		slog.Error("Failed to generate ULID for provisioning job", "error", err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to generate provisioning job ID",
+		})
+		return
+	}
+
 	var jobId string
-	err = pool.QueryRow(reqCtx, "INSERT INTO provisioning_jobs (resource_id, status) VALUES ($1, 'pending') RETURNING id", currentDeployment.Id).Scan(&jobId)
+	err = pool.QueryRow(reqCtx, "INSERT INTO provisioning_jobs (id, resource_id, status) VALUES ($1, $2, 'pending') RETURNING id", id.String(), currentDeployment.Id).Scan(&jobId)
 	if err != nil {
 		slog.Error("Failed to create provisioning job", "resource_id", currentDeployment.Id, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{

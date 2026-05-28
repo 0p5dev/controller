@@ -8,11 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/0p5dev/controller/internal/models"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oklog/ulid/v2"
 	"github.com/stripe/stripe-go/v84"
 )
 
@@ -141,13 +144,20 @@ func getUserByEmail(ctx context.Context, q userRowQuerier, email string) (models
 }
 
 func upsertUser(ctx context.Context, tx pgx.Tx, email string, stripeCustomerID string) (models.User, error) {
+	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
+	ms := ulid.Timestamp(time.Now())
+	id, err := ulid.New(ms, entropy)
+	if err != nil {
+		return models.User{}, fmt.Errorf("failed to generate ULID: %w", err)
+	}
+
 	return scanUser(tx.QueryRow(ctx, `
-		INSERT INTO users (email, stripe_customer_id)
-		VALUES ($1, $2)
+		INSERT INTO users (id, email, stripe_customer_id)
+		VALUES ($1, $2, $3)
 		ON CONFLICT (email) DO UPDATE
 		SET stripe_customer_id = COALESCE(users.stripe_customer_id, EXCLUDED.stripe_customer_id)
 		RETURNING id, email, stripe_customer_id, stripe_payment_method_id, last_billed_at, created_at, updated_at
-	`, email, stripeCustomerID))
+	`, id.String(), email, stripeCustomerID))
 }
 
 func scanUser(row pgx.Row) (models.User, error) {

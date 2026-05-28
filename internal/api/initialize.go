@@ -22,6 +22,7 @@ func ensureEnvVars() error {
 		"AR_REPO_URL",
 		"STRIPE_API_KEY",
 		"STRIPE_WEBHOOK_SIGNING_SECRET",
+		"CLOUD_STORAGE_BUCKET_NAME",
 	}
 
 	for _, v := range requiredVars {
