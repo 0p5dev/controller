@@ -34,11 +34,11 @@ func DatabaseMiddleware() gin.HandlerFunc {
 		name string
 		fn   func(*pgxpool.Pool) error
 	}{
-		{"container_images", models.MigrateContainerImageTable},
-		{"deployments", models.MigrateDeploymentTable},
-		{"provisioning_jobs", models.MigrateProvisioningJobTable},
 		{"users", models.MigrateUserTable},
 		{"usage_ledger", models.MigrateUsageLedgerTable},
+		{"provisioning_jobs", models.MigrateProvisioningJobTable},
+		{"container_images", models.MigrateContainerImageTable},
+		{"deployments", models.MigrateDeploymentTable},
 	}
 
 	for _, migration := range migrations {

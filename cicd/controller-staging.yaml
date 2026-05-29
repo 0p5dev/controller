@@ -44,3 +44,5 @@ spec:
           value: local-first-476300
         - name: GCP_REGION
           value: us-central1
+        - name: CLOUD_STORAGE_BUCKET_NAME
+          value: opsdev-container-images-bucket-staging

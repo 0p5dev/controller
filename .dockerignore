@@ -4,7 +4,7 @@ oauth-jwt-structure.txt
 .env*
 sakey.json
 adc.json
-cloudbuild.yaml
 justfile
 LICENSE
 README.md
+cicd/

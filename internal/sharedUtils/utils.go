@@ -150,6 +150,7 @@ func upsertUser(ctx context.Context, tx pgx.Tx, email string, stripeCustomerID s
 	if err != nil {
 		return models.User{}, fmt.Errorf("failed to generate ULID: %w", err)
 	}
+	safeId := strings.ToLower(id.String())
 
 	return scanUser(tx.QueryRow(ctx, `
 		INSERT INTO users (id, email, stripe_customer_id)
@@ -157,7 +158,7 @@ func upsertUser(ctx context.Context, tx pgx.Tx, email string, stripeCustomerID s
 		ON CONFLICT (email) DO UPDATE
 		SET stripe_customer_id = COALESCE(users.stripe_customer_id, EXCLUDED.stripe_customer_id)
 		RETURNING id, email, stripe_customer_id, stripe_payment_method_id, last_billed_at, created_at, updated_at
-	`, id.String(), email, stripeCustomerID))
+	`, safeId, email, stripeCustomerID))
 }
 
 func scanUser(row pgx.Row) (models.User, error) {

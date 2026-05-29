@@ -88,7 +88,7 @@ func PushToRegistry(c *gin.Context) {
 	}
 	defer storageClient.Close()
 
-	objectName := fmt.Sprintf("%s-%s.tar.gz", reqBody.ImageName, userClaims.UserMetadata.AppUser.Id)
+	objectName := fmt.Sprintf("%s-%s.tgz", reqBody.ImageName, userClaims.UserMetadata.AppUser.Id)
 	objectReader, err := storageClient.Bucket(bucketName).Object(objectName).NewReader(ctx)
 	if err != nil {
 		slog.Error("Failed to open cloud storage object", "bucket", bucketName, "object", objectName, "error", err)
@@ -160,9 +160,10 @@ func PushToRegistry(c *gin.Context) {
 		})
 		return
 	}
+	safeId := strings.ToLower(id.String())
 
 	arRepoUrl := os.Getenv("AR_REPO_URL")
-	targetTag := fmt.Sprintf("%s/%s:%s", arRepoUrl, finalImageName, id.String())
+	targetTag := fmt.Sprintf("%s/%s:%s", arRepoUrl, finalImageName, safeId)
 
 	imageRef, err := name.ParseReference(targetTag)
 	if err != nil {

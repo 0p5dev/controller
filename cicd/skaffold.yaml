@@ -6,10 +6,10 @@ profiles:
 - name: staging
   manifests:
     rawYaml:
-    - controller-staging.yaml
+    - ./controller-staging.yaml
 - name: production
   manifests:
     rawYaml:
-    - controller-production.yaml
+    - ./controller-production.yaml
 deploy:
   cloudrun: {}

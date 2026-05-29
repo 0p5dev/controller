@@ -91,9 +91,10 @@ func UpdateOneByName(c *gin.Context) {
 		})
 		return
 	}
+	safeId := strings.ToLower(id.String())
 
 	var jobId string
-	err = pool.QueryRow(reqCtx, "INSERT INTO provisioning_jobs (id, resource_id, status) VALUES ($1, $2, 'pending') RETURNING id", id.String(), currentDeployment.Id).Scan(&jobId)
+	err = pool.QueryRow(reqCtx, "INSERT INTO provisioning_jobs (id, resource_id, status) VALUES ($1, $2, 'pending') RETURNING id", safeId, currentDeployment.Id).Scan(&jobId)
 	if err != nil {
 		slog.Error("Failed to create provisioning job", "resource_id", currentDeployment.Id, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{

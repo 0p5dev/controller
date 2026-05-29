@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	iampb "cloud.google.com/go/iam/apiv1/iampb"
@@ -84,7 +85,7 @@ func CreateOne(c *gin.Context) {
 		return
 	}
 
-	serviceId := fmt.Sprintf("%s-%s", userClaims.UserMetadata.AppUser.Id, reqBody.Name)
+	serviceId := fmt.Sprintf("%s-%s", reqBody.Name, userClaims.UserMetadata.AppUser.Id)
 
 	// Create entry in provisioning_jobs table and return job ID to client
 	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -97,9 +98,10 @@ func CreateOne(c *gin.Context) {
 		})
 		return
 	}
+	safeId := strings.ToLower(id.String())
 
 	var jobId string
-	err = pool.QueryRow(reqCtx, "INSERT INTO provisioning_jobs (id, resource_id, status) VALUES ($1, $2, 'pending') RETURNING id", id.String(), serviceId).Scan(&jobId)
+	err = pool.QueryRow(reqCtx, "INSERT INTO provisioning_jobs (id, resource_id, status) VALUES ($1, $2, 'pending') RETURNING id", safeId, serviceId).Scan(&jobId)
 	if err != nil {
 		slog.Error("Failed to create provisioning job", "resource_id", serviceId, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{

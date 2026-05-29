@@ -41,7 +41,7 @@ func GenerateSignedUrl(c *gin.Context) {
 		ContentType: "application/gzip",
 	}
 
-	objectName := fmt.Sprintf("%s-%s.tar.gz", reqBody.ImageName, userClaims.UserMetadata.AppUser.Id)
+	objectName := fmt.Sprintf("%s-%s.tgz", reqBody.ImageName, userClaims.UserMetadata.AppUser.Id)
 	url, err := client.Bucket(bucketName).SignedURL(objectName, opts)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Bucket(%q).SignedURL: %v", bucketName, err)})
