@@ -24,7 +24,7 @@ func MigrateUserTable(pool *pgxpool.Pool) error {
 	ctx := context.Background()
 	_, err := pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS users (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			id VARCHAR(26) PRIMARY KEY,
 			email TEXT NOT NULL,
 			stripe_customer_id TEXT,
 			stripe_payment_method_id TEXT,

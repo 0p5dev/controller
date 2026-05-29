@@ -28,7 +28,7 @@ func MigrateDeploymentTable(pool *pgxpool.Pool) error {
 			name TEXT NOT NULL,
 			url TEXT NOT NULL,
 			container_image TEXT NOT NULL REFERENCES container_images(fqin),
-			user_id UUID NOT NULL REFERENCES users(id),
+			user_id VARCHAR(26) NOT NULL REFERENCES users(id),
 			min_instances INT NOT NULL DEFAULT 0,
 			max_instances INT NOT NULL DEFAULT 1,
 			port INT NOT NULL DEFAULT 8080,

@@ -2,17 +2,20 @@ package containerImages
 
 import (
 	"compress/gzip"
-	"context"
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"os"
 	"path"
 	"strings"
+	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oklog/ulid/v2"
 
 	"github.com/0p5dev/controller/internal/sharedUtils"
 
@@ -20,8 +23,11 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/google"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
-	"github.com/google/uuid"
 )
+
+type PushToRegistryRequestBody struct {
+	ImageName string `json:"image_name" binding:"required"`
+}
 
 func getImageNameFromTarballPath(tarPath string) string {
 	opener := func() (io.ReadCloser, error) {
@@ -47,38 +53,57 @@ func getImageNameFromTarballPath(tarPath string) string {
 }
 
 // @Summary Push container image to registry
-// @Description Upload a gzipped docker save tarball and push it to Google Artifact Registry
+// @Description Pull a gzipped docker save tarball from Cloud Storage and push it to Google Artifact Registry
 // @Tags container-images
-// @Accept application/gzip
+// @Accept application/json
 // @Produce json
 // @Security BearerAuth
-// @Param image body string true "Gzipped container image tarball"
+// @Param image body PushToRegistryRequestBody true "Container image payload"
 // @Success 200 {object} map[string]string "Image pushed successfully with FQIN"
 // @Failure 400 {object} map[string]string "Invalid request"
 // @Failure 401 {object} map[string]string "Unauthorized"
-// @Failure 415 {object} map[string]string "Unsupported media type"
 // @Failure 500 {object} map[string]string "Failed to push image"
 // @Router /container-images [post]
 func PushToRegistry(c *gin.Context) {
 	userClaims := c.MustGet("UserClaims").(*sharedUtils.UserClaims)
 	pool := c.MustGet("Pool").(*pgxpool.Pool)
-	ctx := context.Background()
+	ctx := c.Request.Context()
+	bucketName := os.Getenv("CLOUD_STORAGE_BUCKET_NAME")
 
-	// slog.Info("push to registry", "appUser", userClaims.UserMetadata.AppUserMetadata.AppUser)
-
-	// Read gzip stream from request body
-	gzipStream := c.Request.Body
-	contentType := c.ContentType()
-	if contentType != "application/gzip" && contentType != "application/x-gzip" {
-		c.AbortWithStatusJSON(http.StatusUnsupportedMediaType, gin.H{"error": "Content-Type must be application/gzip"})
+	var reqBody PushToRegistryRequestBody
+	if err := c.ShouldBindJSON(&reqBody); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
-	gzr, err := gzip.NewReader(gzipStream)
+	// slog.Info("push to registry", "appUser", userClaims.UserMetadata.AppUserMetadata.AppUser)
+
+	storageClient, err := storage.NewClient(ctx)
+	if err != nil {
+		slog.Error("Failed to create cloud storage client", "error", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to initialize cloud storage client",
+		})
+		return
+	}
+	defer storageClient.Close()
+
+	objectName := fmt.Sprintf("%s-%s.tgz", reqBody.ImageName, userClaims.UserMetadata.AppUser.Id)
+	objectReader, err := storageClient.Bucket(bucketName).Object(objectName).NewReader(ctx)
+	if err != nil {
+		slog.Error("Failed to open cloud storage object", "bucket", bucketName, "object", objectName, "error", err)
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "Failed to read image tarball from cloud storage",
+		})
+		return
+	}
+	defer objectReader.Close()
+
+	gzr, err := gzip.NewReader(objectReader)
 	if err != nil {
 		slog.Error("Gzip reader error", "error", err)
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"error": "Failed to create gzip reader (invalid gzip data).",
+			"error": "Failed to create gzip reader (invalid gzip data)",
 		})
 		return
 	}
@@ -125,17 +150,20 @@ func PushToRegistry(c *gin.Context) {
 	finalImageName := fmt.Sprintf("%s-%s", originalImageName, userClaims.UserMetadata.AppUser.Id)
 
 	// Tag image for target registry
-	arRepoUrl := os.Getenv("AR_REPO_URL")
-	if arRepoUrl == "" {
-		slog.Error("Missing AR_REPO_URL configuration")
+	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
+	ms := ulid.Timestamp(time.Now())
+	id, err := ulid.New(ms, entropy)
+	if err != nil {
+		slog.Error("Failed to generate ULID for image tag", "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": "Server misconfiguration: AR_REPO_URL is required",
+			"error": "Failed to generate unique image tag",
 		})
 		return
 	}
-	uuid := uuid.New().String()
-	shortTag := uuid[:8]
-	targetTag := fmt.Sprintf("%s/%s:%s", arRepoUrl, finalImageName, shortTag)
+	safeId := strings.ToLower(id.String())
+
+	arRepoUrl := os.Getenv("AR_REPO_URL")
+	targetTag := fmt.Sprintf("%s/%s:%s", arRepoUrl, finalImageName, safeId)
 
 	imageRef, err := name.ParseReference(targetTag)
 	if err != nil {

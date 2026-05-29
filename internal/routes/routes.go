@@ -36,7 +36,9 @@ func CreateRoutes(router *gin.Engine) {
 
 	containerImages := apiv1.Group("/container-images")
 	containerImages.Use(middleware.AuthMiddleware())
-	containerImages.POST("", middleware.PaymentMethodMiddleware(), containerImagesHandler.PushToRegistry)
+	containerImages.Use(middleware.PaymentMethodMiddleware())
+	containerImages.POST("/signed-url", containerImagesHandler.GenerateSignedUrl)
+	containerImages.POST("", containerImagesHandler.PushToRegistry)
 
 	deployments := apiv1.Group("/deployments")
 	deployments.Use(middleware.AuthMiddleware())

@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"os"
 	"slices"
+	"strings"
+	"time"
 
 	iampb "cloud.google.com/go/iam/apiv1/iampb"
 	run "cloud.google.com/go/run/apiv2"
@@ -14,6 +17,7 @@ import (
 	"github.com/0p5dev/controller/internal/sharedUtils"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oklog/ulid/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -55,6 +59,14 @@ func CreateOne(c *gin.Context) {
 		return
 	}
 
+	if len(reqBody.Name) > 20 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "invalid deployment name",
+			"message": "name must be 20 characters or less",
+		})
+		return
+	}
+
 	var existingDeployment bool
 	err := pool.QueryRow(reqCtx, `SELECT EXISTS(SELECT 1 FROM deployments WHERE name=$1 AND user_id=$2)`, reqBody.Name, userClaims.UserMetadata.AppUser.Id).Scan(&existingDeployment)
 	if err != nil {
@@ -76,8 +88,20 @@ func CreateOne(c *gin.Context) {
 	serviceId := fmt.Sprintf("%s-%s", reqBody.Name, userClaims.UserMetadata.AppUser.Id)
 
 	// Create entry in provisioning_jobs table and return job ID to client
+	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
+	ms := ulid.Timestamp(time.Now())
+	id, err := ulid.New(ms, entropy)
+	if err != nil {
+		slog.Error("Failed to generate ULID for provisioning job", "error", err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to generate provisioning job ID",
+		})
+		return
+	}
+	safeId := strings.ToLower(id.String())
+
 	var jobId string
-	err = pool.QueryRow(reqCtx, "INSERT INTO provisioning_jobs (resource_id, status) VALUES ($1, 'pending') RETURNING id", serviceId).Scan(&jobId)
+	err = pool.QueryRow(reqCtx, "INSERT INTO provisioning_jobs (id, resource_id, status) VALUES ($1, $2, 'pending') RETURNING id", safeId, serviceId).Scan(&jobId)
 	if err != nil {
 		slog.Error("Failed to create provisioning job", "resource_id", serviceId, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{

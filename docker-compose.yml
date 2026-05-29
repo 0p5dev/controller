@@ -32,6 +32,7 @@ services:
       STRIPE_API_KEY: ${STRIPE_API_KEY}
       STRIPE_WEBHOOK_SIGNING_SECRET: ${STRIPE_WEBHOOK_SIGNING_SECRET}
       AR_REPO_URL: us-central1-docker.pkg.dev/local-first-476300/container-images-dev
+      CLOUD_STORAGE_BUCKET_NAME: opsdev-container-images-bucket-staging
       GCP_PROJECT_ID: local-first-476300
       GCP_REGION: us-central1
       GIN_MODE: debug

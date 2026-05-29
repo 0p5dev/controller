@@ -19,7 +19,7 @@ func MigrateContainerImageTable(pool *pgxpool.Pool) error {
 	_, err := pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS container_images (
 			fqin TEXT PRIMARY KEY,
-			user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+			user_id VARCHAR(26) REFERENCES users(id) ON DELETE SET NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
